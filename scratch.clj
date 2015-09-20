@@ -16,11 +16,11 @@
     (Thread/sleep 1)))
 
 (dotimes [_ 10]
-  (doseq [n (range 0 1 0.01)]
+  (doseq [n (range 0 1 0.04)]
     (goto n)
-    (Thread/sleep 2))
+    (Thread/sleep 1))
   (doseq [n (range 1 0 -0.01)]
     (goto n)
-    (Thread/sleep 2)))
+    (Thread/sleep 1)))
 
 
