@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include "types.h"
 
 class DriveUnit {
  private:
@@ -24,6 +23,7 @@ class DriveUnit {
     _pinLPWM = pinLPWM;
     _pinPos = pinPos;
     _target = map(30, 0, 100, POS_LOW, POS_HIGH);
+    _channelName = channelName;
   }
 
   void setup() {
@@ -35,6 +35,10 @@ class DriveUnit {
     digitalWrite(_pinDis, LOW);
   }
 
+  String channelName() {
+    return _channelName;
+  }
+  
   void seek(float target) {
     // Inside this object we use potentiometer coordinates. Outside,
     // we use the range [0.0, 1.0]
@@ -42,6 +46,10 @@ class DriveUnit {
   }
 
   void update() {
+    static unsigned long counter = 0;
+
+    ++counter;
+
     // TODO: Do we still need to bother with this smoothing?
     _vals[_counter % 3] = analogRead(_pinPos);
 
@@ -99,7 +107,8 @@ class DriveUnit {
 };
 
 DriveUnit* driveUnits[] = {
-  new DriveUnit("BL", 2, 4, 3, 11, 0)
+  new DriveUnit("BL", 2, 4, 3, 11, 0),
+  new DriveUnit("BR", 7, 8, 9, 10, 1)
   /* TODO: Others, although we only have seven PWM outputs, and we
      need 8 to drive four motors. One possibility is to use digital
      outputs and do a software PWM. Something along the lines of high
@@ -109,48 +118,27 @@ DriveUnit* driveUnits[] = {
 
 const int driveUnitCount = sizeof(driveUnits)/sizeof(DriveUnit*);
 
-Command parseCommand(String input) {
+void dispatchCommand(String command) {
   Serial.print("Parsing ");
-  Serial.println(input);
+  Serial.println(command);
 
-  Command command;
-  if (input.startsWith("BR ")) {
-    command.type = MoveTo;
-    command.data.moveTo.channel = BackRight;
-    command.data.moveTo.target = input.substring(3).toFloat();
+  if (command.startsWith("M ")) {
+    String args = command.substring(2);
+    for (int i = 0; i < driveUnitCount; ++i) {
+      DriveUnit* unit = driveUnits[i];
+      String channel = unit->channelName();
+      if (args.startsWith(channel) && args.substring(channel.length(), 1).equals(" ")) {
+        unit->seek(args.substring(channel.length() + 1).toFloat());
+        break;
+      }
+    }
   }
-  else if (input.startsWith("BL")) {
-    command.type = MoveTo;
-    command.data.moveTo.channel = BackLeft;
-    command.data.moveTo.target = input.substring(3).toFloat();
-  }
-  else if (input.startsWith("SR ")) {
-    command.type = MoveTo;
-    command.data.moveTo.channel = SeatRight;
-    command.data.moveTo.target = input.substring(3).toFloat();
-  }
-  else if (input.startsWith("SL")) {
-    command.type = MoveTo;
-    command.data.moveTo.channel = SeatLeft;
-    command.data.moveTo.target = input.substring(3).toFloat();
+  else if (command.equals("PING")) {
+    Serial.println("ACK G-SEAT");
   }
   else {
-    command.type = None;
     Serial.print("Invalid command - ignoring: ");
-    Serial.println(input);
-  }
-
-  return command;
-}
-
-void dispatchCommand(Command command) {
-  switch (command.type) {
-  case MoveTo:
-    // Safeguard until we implement all of them
-    if (command.data.moveTo.channel < driveUnitCount) {
-      driveUnits[command.data.moveTo.channel]->seek(command.data.moveTo.target);
-    }
-    break;
+    Serial.println(command);
   }
 }
 
@@ -171,17 +159,13 @@ void setup() {
 
 void loop() {
   static String pending = "";
-  static unsigned long counter = 0;
   static int vals[] = { 950, 950, 950 };
-
-  ++counter;
 
   while (Serial.available() > 0) {
     int inChar = Serial.read();
 
     if (inChar == '\n') {
-      Command command = parseCommand(pending);
-      dispatchCommand(command);
+      dispatchCommand(pending);
       pending = "";
     }
     else {
