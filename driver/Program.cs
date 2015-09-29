@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Windows.Media.Media3D;
 
 namespace driver
 {
@@ -260,7 +262,7 @@ namespace driver
         TgtSep = 0x20,
 
         // EWS
-        Go = 0x40,		// On and operating normally
+        Go = 0x40,              // On and operating normally
         NoGo = 0x80,     // On but malfunction present
         Degr = 0x100,    // Status message: AUTO DEGR
         Rdy = 0x200,    // Status message: DISPENSE RDY
@@ -513,28 +515,230 @@ namespace driver
 
     static class Program
     {
+        public static float sin(float rad)
+        {
+            return (float) Math.Sin(rad);
+        }
+
+        public static float cos(float rad)
+        {
+            return (float) Math.Cos(rad);
+        }
+
+        public static float ToRadians(float deg)
+        {
+            //  (/ (* deg Math/PI) 180.0))
+            return (float) (deg * 3.1415926F) / 180.0F;
+        }
+
+        public static float ToDegrees(float rad)
+        {
+            //  (/ (* deg Math/PI) 180.0))
+            return (float) (rad * 180.0F) / 3.1415926F;
+        }
+
+        public static float Dot(Vector3D a, Vector3D b)
+        {
+            return a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+        }
+
+        public static Vector3D Transform(Matrix3D m, Vector3D v)
+        {
+            return new Vector3D(v.X * m.M11 + v.Y * m.M12 + v.Z * m.M13,
+                                v.X * m.M21 + v.Y * m.M22 + v.Z * m.M23,
+                                v.X * m.M31 + v.Y * m.M32 + v.Z * m.M33);
+        }
+
+        public static Vector3D Add(Vector3D a, Vector3D b)
+        {
+            return new Vector3D(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
+        }
+
+        public static Vector3D Subtract(Vector3D a, Vector3D b)
+        {
+            return new Vector3D(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
+        }
+
+        public static Vector3D Scale(Vector3D v, float s)
+        {
+            return new Vector3D(v.X * s, v.Y * s, v.Z * s);
+        }
+
         /// <summary>
-        /// The main entry point for the application.
+        ///   Returns a Matrix3D for the specified yaw, pitch, and
+        ///   roll, which are in radians.
         /// </summary>
-        [STAThread]
+                static Matrix3D YPR(float yaw, float pitch, float roll)
+        {
+            float sy = sin(yaw);
+            float cy = cos(yaw);
+            float sp = sin(pitch);
+            float cp = cos(pitch);
+            float sr = sin(roll);
+            float cr = cos(roll);
+
+            return new Matrix3D(cp * cy,
+                                (cy * sp * sr) - (sy * cr),
+                                (cy * cr * sp) + (sy * sr),
+
+                                sy * cp,
+                                (sy * sp * sr) + (cr * cy),
+                                (sy * cr * sp) - (cy * sr),
+
+                                -sp,
+                                sr * cp,
+                                cr * cp);
+        }
+
+        static float Map(float val, float in1, float in2, float out1, float out2)
+        {
+            // TODO: Make this nonlinear if need be
+            return ((val - in1) / (in2 - in1)) * (out2 - out1) + out1;
+        }
+
+        static float Clamp(float val, float min, float max)
+        {
+            return (float) Math.Max(Math.Min(val, max), min);
+        }
+
+        static float Nonlinear(float x)
+        {
+            return 1.0F - (1.0F / (x + 1.0F));
+        }
+
+        public static float Position(float g, float baseG)
+        {
+            if (g > baseG)
+            {
+                return Map(Nonlinear(g - baseG),
+                           0, 1, 0.25F, 1.0F);
+            }
+            else
+            {
+                return Map(Nonlinear(baseG - g),
+                           0, 1, 0.25F, 0);
+            }
+        }
+
+        static void Sleep(int millis)
+        {
+            System.Threading.Thread.Sleep(millis);
+        }
+
+        /// <summary>
+        ///   Time in seconds from some point
+        /// </summary>
+        static float Now()
+        {
+            return DateTime.Ticks / 10000000.0F;
+        }
+
         static void Main()
         {
+            // How long to sleep between polling, in ms
+            int interval = 20;
+
             SharedMemory memoryArea1 = new SharedMemory("FalconSharedMemoryArea");
             SharedMemory memoryArea2 = new SharedMemory("FalconSharedMemoryArea2");
 
             memoryArea1.Open();
             memoryArea2.Open();
 
+            int history = 3;
+            float[] ts = new float[history];
+            // Yaw, pitch, roll
+            Vector3D[] seats = new Vector3D[history];
+            Vector3D[] vs = new Vector3D[history];
+            long counter = 0;
+
+            float deg20 = ToRadians(20);
+            float deg6 = ToRadians(6);
+            float G = 32.174F;
+
+            Vector3D gravity = new Vector3D(0, 0, G);
+
+            // Where the seat is relative to the center of rotation,
+            // in feet, in aircraft coords.
+            Vector3D seatPos = new Vector3D(10, 0, -3);
+
+            // The G force on the various parts of the seat when at rest.
+            float backNeutralG = sin(deg20);
+            float seatNeutralG = cos(deg6);
+
+            Vector3D blNormal = Transform(YPR(deg20, deg20, 0),
+                                          new Vector3D(-1, 0, 0));
+            Vector3D brNormal = Transform(YPR(-deg20, deg20, 0),
+                                          new Vector3D(-1, 0, 0));
+            Vector3D slNormal = Transform(YPR(0, deg6, deg20),
+                                          new Vector3D(0, 0, 1));
+            Vector3D srNormal = Transform(YPR(0, deg6, -deg20),
+                                          new Vector3D(0, 0, 1));
+
             while (true)
             {
+                long index = counter % history;
+
                 FlightData data = (FlightData)memoryArea1.MarshalTo(typeof(FlightData));
-                // Looks like all we need is yaw, pitch, and roll to give the pointing vector of 
-                // the nose of the aircraft (they are in radians), and then xdot, ydot, and zdot 
-                // to give the acceleration (they are in ft/sec).
-                // Console.WriteLine("x: {0}, y: {1}, z: {2}, xd: {3}, yd: {4}, zd: {5}", data.x, data.y, data.z, data.xDot, data.yDot, data.zDot);
-                // Console.WriteLine("a: {0}, b: {1}, c: {2}", data.alpha, data.beta, data.gamma);
-                Console.WriteLine("p: {0}, r: {1}, y: {2}", data.pitch, data.roll, data.yaw);
-                System.Threading.Thread.Sleep(20);
+                t = Now();
+                float x = data.x;
+                float y = data.y;
+                float z = data.z;
+                float yaw = data.yaw;
+                float pitch = data.pitch;
+                float roll = data.roll;
+
+
+                // Rotating index into the various history arrays
+                int[] ago = new int[history];
+                for (int n = 0; n < history; ++n)
+                {
+                    ago[n] = (int) ((index - n + history) % history);
+                }
+                int now = ago[0];
+
+                ts[now] = t;
+                Vector3D airframe = new Vector3D(x, y, z);
+                Matrix3D xform = YPR(yaw, pitch, roll);
+                seats[now] = Add(airframe, Transform(xform, seatPos));
+
+                vs[now] = Scale(Subtract(seats[now], seats[ago[1]]), ts[now] - ts[ago[1]]);
+
+                // We skip the first few frames until we have enough
+                // history to do calculation
+                if (counter >= (history - 1))
+                {
+                    Vector3D bln = Transform(xform, blNormal);
+                    Vector3D brn = Transform(xform, brNormal);
+                    Vector3D sln = Transform(xform, slNormal);
+                    Vector3D srn = Transform(xform, srNormal);
+
+                    // ft/sec/sec
+                    Vector3D acc = Scale(Subtract(vs[now], vs[ago[1]]), 1.0F / (ts[now] - ts[ago[1]]));
+                    Vector3D f = Add(gravity, Scale(acc, -1.0F));
+
+                    float bl = Dot(f, bln);
+                    float br = Dot(f, brn);
+                    float sl = Dot(f, sln);
+                    float sr = Dot(f, srn);
+
+                    float blG = bl / G;
+                    float brG = br / G;
+                    float slG = sl / G;
+                    float srG = sr / G;
+
+                    // TODO: Map the neutral (1G) position as .25
+                    float commandBL = Position(blG, backNeutralG);
+                    float commandBR = Position(brG, backNeutralG);
+                    float commandSL = Position(slG, seatNeutralG);
+                    float commandSR = Position(srG, seatNeutralG);
+
+                    Console.WriteLine("M BL {0}", commandBL);
+                    Console.WriteLine("M BR {0}", commandBR);
+                    Console.WriteLine("M SL {0}", commandSL);
+                    Console.WriteLine("M SR {0}", commandSR);
+                    Sleep(interval);
+                }
+                ++counter;
             }
         }
     }
