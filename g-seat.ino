@@ -123,7 +123,7 @@ class DriveUnit {
 
     int drive = 0;
 
-    int fullSpeedDiff = 100;
+    int fullSpeedDiff = 50;
     int fullSpeedDrive = 250;
     int zeroSpeedDiff = 10;
     int maxApproachSpeed = 200;
@@ -162,16 +162,30 @@ class DriveUnit {
     else if (((val < _seeking) && (_direction == Left)) ||
              ((val > _seeking) && (_direction == Right))) {
       digitalWrite(_pinEn, HIGH);
-      //digitalWrite(_pinRPWM, LOW);
-      analogWrite(_pinRPWM, (250 - drive));
       digitalWrite(_pinLPWM, HIGH);
+
+      if ((micros() % 255) < drive) {
+        digitalWrite(_pinRPWM, LOW);
+      }
+      else {
+        digitalWrite(_pinRPWM, HIGH);
+      }
+
+      //analogWrite(_pinRPWM, (250 - drive));
       debug("L");
     }
     else {
       digitalWrite(_pinEn, HIGH);
       digitalWrite(_pinRPWM, HIGH);
-      analogWrite(_pinLPWM, (250 - drive));
-      //digitalWrite(_pinLPWM, LOW);
+
+      if ((micros() % 255) < drive) {
+        digitalWrite(_pinLPWM, LOW);
+      }
+      else {
+        digitalWrite(_pinLPWM, HIGH);
+      }
+
+      //analogWrite(_pinLPWM, (250 - drive));
       debug("R");
     }
 
@@ -181,8 +195,8 @@ class DriveUnit {
 };
 
 DriveUnit* driveUnits[] = {
-  //new DriveUnit("BL", 2, 4, 3, 11, 0, Left),
-  new DriveUnit("BR", 2, 4, 3, 11, 0, Right),
+  new DriveUnit("BL", 2, 4, 3, 11, 0, Left),
+  //new DriveUnit("BR", 2, 4, 3, 11, 0, Right),
   //new DriveUnit("BR", 7, 8, 9, 10, 1)
   /* TODO: Others, although we only have seven PWM outputs, and we
      need 8 to drive four motors. One possibility is to use digital
