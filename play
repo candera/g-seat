@@ -1,8 +1,9 @@
 #!/bin/bash
 
-for i in `seq 750 1 1020`;
+for i in `seq 0 0.1 1`;
 do
-    echo "GOTO $i" > /dev/cu.usbmodem14121    
+    echo "M BL $i"  > /dev/cu.usbmodem1411
+    sleep 1
     #echo "GOTO $(($RANDOM * (1020 - 830)  / 32768 + 830))" > /dev/cu.usbmodem14121
     # echo "GOTO 1020" > /dev/cu.usbmodem14121
     # sleep 1
