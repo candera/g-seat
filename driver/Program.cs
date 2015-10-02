@@ -705,7 +705,7 @@ namespace driver
 
                 // We skip the first few frames until we have enough
                 // history to do calculation
-                if (counter >= (history - 1))
+                if (counter > history)
                 {
                     Vector3D bln = Transform(xform, blNormal);
                     Vector3D brn = Transform(xform, brNormal);
@@ -736,8 +736,8 @@ namespace driver
                     Console.WriteLine("M BR {0}", commandBR);
                     Console.WriteLine("M SL {0}", commandSL);
                     Console.WriteLine("M SR {0}", commandSR);
-                    Sleep(interval);
                 }
+                Sleep(interval);
                 ++counter;
             }
         }
