@@ -7,7 +7,7 @@ do
     # P=$(($RANDOM/327))
     # echo $P
     # echo "M BR 0.$P"  > $1
-    echo "M BR $i" > $1
+    echo "M $1 $i" > $2
     sleep 0.1
     #echo "GOTO $(($RANDOM * (1020 - 830)  / 32768 + 830))" > /dev/cu.usbmodem14121
     # echo "GOTO 1020" > /dev/cu.usbmodem14121

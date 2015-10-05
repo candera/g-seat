@@ -4,5 +4,9 @@ void setup() {
 
 
 void loop() {
-  Serial.println(analogRead(0));
+  Serial.print("0: ");
+  Serial.print(analogRead(0));
+  Serial.print(" 1: ");
+  Serial.println(analogRead(1));
+  delay(200);
 }
