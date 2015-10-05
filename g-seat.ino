@@ -34,9 +34,9 @@ void debug() {
 
 class DriveUnit {
  private:
-  const int POS_LOW = 750;
+  const int POS_LOW = 780;
   const int POS_HIGH = 1020;
-  const int HISTORY = 9;
+  const int HISTORY = 1;
   String _channelName;
   int _pinEn;
   int _pinDis;
@@ -69,12 +69,7 @@ class DriveUnit {
   }
 
   int seeking(float target) {
-    if (_direction == Right) {
-      return map(target * 1000000, 0, 1000000, POS_HIGH, POS_LOW);
-    }
-    else {
-      return map(target * 1000000, 0, 1000000, POS_LOW, POS_HIGH);
-    }      
+    return map(target * 1000000, 0, 1000000, POS_HIGH, POS_LOW);
   }
 
   void setup() {
@@ -123,17 +118,27 @@ class DriveUnit {
 
     int drive = 0;
 
-    int fullSpeedDiff = 50;
+    int fullSpeedDiff = 30;
     int fullSpeedDrive = 250;
-    int zeroSpeedDiff = 10;
-    int maxApproachSpeed = 200;
-    int minApproachSpeed = 50;
+    int zeroSpeedDiff = 5;
+    int minApproachSpeed = 100;
+
+    boolean uphill =
+      ((val < _seeking) && (_direction == Left)) ||
+      ((val > _seeking) && (_direction == Right));
+    boolean downhill = !uphill;
+
+    if (downhill) {
+      fullSpeedDiff = 100;
+      //zeroSpeedDiff = (int) (zeroSpeedDiff * 0.5F);
+      minApproachSpeed = 0;
+    }
 
     if (diff > fullSpeedDiff) {
       drive = fullSpeedDrive;
     }
     else if (diff > zeroSpeedDiff) {
-      drive = map(diff, zeroSpeedDiff, fullSpeedDiff, minApproachSpeed, maxApproachSpeed);
+      drive = map(diff, zeroSpeedDiff, fullSpeedDiff, minApproachSpeed, fullSpeedDrive);
     }
 
     debug(_channelName);
@@ -159,8 +164,7 @@ class DriveUnit {
       digitalWrite(_pinRPWM, HIGH);
       digitalWrite(_pinLPWM, HIGH);
     }
-    else if (((val < _seeking) && (_direction == Left)) ||
-             ((val > _seeking) && (_direction == Right))) {
+    else if (uphill) {
       digitalWrite(_pinEn, HIGH);
       digitalWrite(_pinLPWM, HIGH);
 
@@ -195,8 +199,9 @@ class DriveUnit {
 };
 
 DriveUnit* driveUnits[] = {
-  new DriveUnit("BL", 2, 4, 3, 11, 0, Left),
-  //new DriveUnit("BR", 2, 4, 3, 11, 0, Right),
+  //            Ch,   En, Dis, RPWM, LPWM, pos, dir
+  new DriveUnit("BL",  2,   4,    3,   11,   0, Left),
+  new DriveUnit("BR", 10,   8,    9,    7,   1, Left)
   //new DriveUnit("BR", 7, 8, 9, 10, 1)
   /* TODO: Others, although we only have seven PWM outputs, and we
      need 8 to drive four motors. One possibility is to use digital
