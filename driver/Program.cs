@@ -512,7 +512,7 @@ namespace driver
 
     }
 
-    /* I made my own because I wrote this on a Mac and Mono 
+    /* I made my own because I wrote this on a Mac and Mono
         doesn't have the Microsoft libs. */
     struct Vector3D
     {
@@ -705,7 +705,8 @@ namespace driver
             float[] ts = new float[history];
             // Yaw, pitch, roll
             Vector3D[] seats = new Vector3D[history];
-            Vector3D[] vs = new Vector3D[history];
+            Vector3D[] vAirframe = new Vector3D[history];
+            Vector3D[] vSeats = new Vector3D[history];
             long counter = 0;
 
             float deg20 = ToRadians(20);
@@ -752,12 +753,12 @@ namespace driver
                     {
                         _recordFlushOp.Wait();
                     }
-                    recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}",
+                    recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}",
                                            t,
                                            x, y, z,
                                            yaw, pitch, roll,
-                                           data.xDot, data.yDot, data.zDot,
-                                           data.alpha, data.beta, data.gamma);
+                                           data.xDot, data.yDot, data.zDot);
+
                     _recordFlushOp = recordWriter.FlushAsync();
                 }
 
@@ -772,9 +773,11 @@ namespace driver
                 ts[now] = t;
                 Vector3D airframe = new Vector3D(x, y, z);
                 Matrix3D xform = YPR(yaw, pitch, roll);
-                seats[now] = Add(airframe, Transform(xform, seatPos));
+                seats[now] = Transform(xform, seatPos);
 
-                vs[now] = Scale(Subtract(seats[now], seats[ago[1]]), ts[now] - ts[ago[1]]);
+                vAirframe[now] = new Vector3D(data.xDot, data.yDot, data.zDot);
+                vSeats[now] = Scale(Subtract(seats[now], seats[ago[1]]), ts[now] - ts[ago[1]]);
+
 
                 // We skip the first few frames until we have enough
                 // history to do calculation
@@ -786,7 +789,10 @@ namespace driver
                     Vector3D srn = Transform(xform, srNormal);
 
                     // ft/sec/sec
-                    Vector3D acc = Scale(Subtract(vs[now], vs[ago[1]]), 1.0F / (ts[now] - ts[ago[1]]));
+                    float deltaT = ts[now] - ts[ago[1]];
+                    Vector3D aAirframe = Scale(Subtract(vAirframe[now], vAirframe[ago[1]]), 1.0F / deltaT);
+                    Vector3D aSeat = Scale(Subtract(vSeats[now], vSeats[ago[1]]), 1.0F / deltaT);
+                    Vector3D acc = Add(aAirframe, aSeat);
                     Vector3D f = Add(gravity, Scale(acc, -1.0F));
 
                     float bl = Dot(f, bln);
