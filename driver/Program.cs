@@ -5,8 +5,6 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-using System.Windows.Forms;
-using System.Windows.Media.Media3D;
 
 namespace driver
 {
@@ -514,6 +512,51 @@ namespace driver
 
     }
 
+    /* I made my own because I wrote this on a Mac and Mono 
+        doesn't have the Microsoft libs. */
+    struct Vector3D
+    {
+        public float X { get; }
+        public float Y { get; }
+        public float Z { get; }
+
+        public Vector3D(float x, float y, float z)
+        {
+            X = x;
+            Y = y;
+            Z = z;
+        }
+    }
+
+    struct Matrix3D
+    {
+        public float M11 { get; }
+        public float M12 { get; }
+        public float M13 { get; }
+        public float M21 { get; }
+        public float M22 { get; }
+        public float M23 { get; }
+        public float M31 { get; }
+        public float M32 { get; }
+        public float M33 { get; }
+
+        public Matrix3D(float m11, float m12, float m13,
+                        float m21, float m22, float m23,
+                        float m31, float m32, float m33)
+        {
+            M11 = m11;
+            M12 = m12;
+            M13 = m13;
+            M21 = m21;
+            M22 = m22;
+            M23 = m23;
+            M31 = m31;
+            M32 = m32;
+            M33 = m33;
+        }
+    }
+
+
     static class Program
     {
         public static float sin(float rad)
@@ -540,7 +583,7 @@ namespace driver
 
         public static float Dot(Vector3D a, Vector3D b)
         {
-            return a.X * b.X + a.Y * b.Y + a.Z * b.Z;
+            return (float) (a.X * b.X + a.Y * b.Y + a.Z * b.Z);
         }
 
         public static Vector3D Transform(Matrix3D m, Vector3D v)
@@ -569,7 +612,7 @@ namespace driver
         ///   Returns a Matrix3D for the specified yaw, pitch, and
         ///   roll, which are in radians.
         /// </summary>
-                static Matrix3D YPR(float yaw, float pitch, float roll)
+        static Matrix3D YPR(float yaw, float pitch, float roll)
         {
             float sy = sin(yaw);
             float cy = cos(yaw);
@@ -626,18 +669,19 @@ namespace driver
             System.Threading.Thread.Sleep(millis);
         }
 
+        static long _startTicks = DateTime.Now.Ticks;
         /// <summary>
         ///   Time in seconds from some point
         /// </summary>
         static float Now()
         {
-            return DateTime.Ticks / 10000000.0F;
+            return (DateTime.Now.Ticks - _startTicks) / 10000000.0F;
         }
 
         /// <summary>
         ///   Returns FlightData and a time
         /// </summary>
-        static Func<Tuple<FlightData,float> BMSSource()
+        static Func<Tuple<FlightData,float>> BMSSource()
         {
             SharedMemory memoryArea1 = new SharedMemory("FalconSharedMemoryArea");
             SharedMemory memoryArea2 = new SharedMemory("FalconSharedMemoryArea2");
@@ -651,13 +695,9 @@ namespace driver
             };
         }
 
-        static void Drive(Func<FlightData> source, bool recordPath)
+        static Task _recordFlushOp = null;
+        static void Drive(Func<Tuple<FlightData, float>> source, TextWriter recordWriter)
         {
-            StreamWriter recordWriter = null;
-            if (recordPath != null)
-            {
-                recordWriter = new StreamWriter(recordPath);
-            }
             // How long to sleep between polling, in ms
             int interval = 20;
 
@@ -696,8 +736,8 @@ namespace driver
                 long index = counter % history;
 
                 var sourceData = source();
-                FlightData data = source.Item1;
-                float t = source.Item2;
+                FlightData data = sourceData.Item1;
+                float t = sourceData.Item2;
 
                 float x = data.x;
                 float y = data.y;
@@ -708,10 +748,17 @@ namespace driver
 
                 if (recordWriter != null)
                 {
-                    recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}",
+                    if (_recordFlushOp != null)
+                    {
+                        _recordFlushOp.Wait();
+                    }
+                    recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}",
                                            t,
                                            x, y, z,
-                                           yaw, pitch, roll);
+                                           yaw, pitch, roll,
+                                           data.xDot, data.yDot, data.zDot,
+                                           data.alpha, data.beta, data.gamma);
+                    _recordFlushOp = recordWriter.FlushAsync();
                 }
 
                 // Rotating index into the various history arrays
@@ -758,10 +805,10 @@ namespace driver
                     float commandSL = Position(slG, seatNeutralG);
                     float commandSR = Position(srG, seatNeutralG);
 
-                    Console.WriteLine("M BL {0}", commandBL);
-                    Console.WriteLine("M BR {0}", commandBR);
-                    Console.WriteLine("M SL {0}", commandSL);
-                    Console.WriteLine("M SR {0}", commandSR);
+                    Console.WriteLine("M BL {0} {1}", commandBL, blG);
+                    Console.WriteLine("M BR {0} {1}", commandBR, brG);
+                    Console.WriteLine("M SL {0} {1}", commandSL, slG);
+                    Console.WriteLine("M SR {0} {1}", commandSR, srG);
                 }
                 Sleep(interval);
                 ++counter;
@@ -770,9 +817,18 @@ namespace driver
 
         static void Main(String[] args)
         {
-            if (args[0] == "--record")
+            if (args.Length > 0 && args[0] == "--record")
             {
-                Drive(BMSSource(), args[1]);
+                TextWriter recordWriter;
+                if (args.Length > 1)
+                {
+                    recordWriter = new StreamWriter(args[1]);
+                }
+                else
+                {
+                    recordWriter = Console.Out;
+                }
+                Drive(BMSSource(), recordWriter);
             }
             else
             {
