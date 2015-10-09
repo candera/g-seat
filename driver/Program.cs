@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -633,16 +634,32 @@ namespace driver
             return DateTime.Ticks / 10000000.0F;
         }
 
-        static void Main()
+        /// <summary>
+        ///   Returns FlightData and a time
+        /// </summary>
+        static Func<Tuple<FlightData,float> BMSSource()
         {
-            // How long to sleep between polling, in ms
-            int interval = 20;
-
             SharedMemory memoryArea1 = new SharedMemory("FalconSharedMemoryArea");
             SharedMemory memoryArea2 = new SharedMemory("FalconSharedMemoryArea2");
 
             memoryArea1.Open();
             memoryArea2.Open();
+
+            return delegate() {
+                FlightData data = (FlightData)memoryArea1.MarshalTo(typeof(FlightData));
+                return Tuple.Create(data, Now());
+            };
+        }
+
+        static void Drive(Func<FlightData> source, bool recordPath)
+        {
+            StreamWriter recordWriter = null;
+            if (recordPath != null)
+            {
+                recordWriter = new StreamWriter(recordPath);
+            }
+            // How long to sleep between polling, in ms
+            int interval = 20;
 
             int history = 3;
             float[] ts = new float[history];
@@ -678,8 +695,10 @@ namespace driver
             {
                 long index = counter % history;
 
-                FlightData data = (FlightData)memoryArea1.MarshalTo(typeof(FlightData));
-                t = Now();
+                var sourceData = source();
+                FlightData data = source.Item1;
+                float t = source.Item2;
+
                 float x = data.x;
                 float y = data.y;
                 float z = data.z;
@@ -687,6 +706,13 @@ namespace driver
                 float pitch = data.pitch;
                 float roll = data.roll;
 
+                if (recordWriter != null)
+                {
+                    recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}",
+                                           t,
+                                           x, y, z,
+                                           yaw, pitch, roll);
+                }
 
                 // Rotating index into the various history arrays
                 int[] ago = new int[history];
@@ -739,6 +765,18 @@ namespace driver
                 }
                 Sleep(interval);
                 ++counter;
+            }
+        }
+
+        static void Main(String[] args)
+        {
+            if (args[0] == "--record")
+            {
+                Drive(BMSSource(), args[1]);
+            }
+            else
+            {
+                Drive(BMSSource(), null);
             }
         }
     }
