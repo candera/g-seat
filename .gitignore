@@ -5,3 +5,4 @@
 /driver/bin/Debug
 /driver/obj/Debug
 *.suo
+*.user
