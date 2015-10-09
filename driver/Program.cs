@@ -699,7 +699,7 @@ namespace driver
         static void Drive(Func<Tuple<FlightData, float>> source, TextWriter recordWriter)
         {
             // How long to sleep between polling, in ms
-            int interval = 20;
+            int interval = 100;
 
             int history = 3;
             float[] ts = new float[history];
@@ -746,21 +746,6 @@ namespace driver
                 float yaw = data.yaw;
                 float pitch = data.pitch;
                 float roll = data.roll;
-
-                if (recordWriter != null)
-                {
-                    if (_recordFlushOp != null)
-                    {
-                        _recordFlushOp.Wait();
-                    }
-                    recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}",
-                                           t,
-                                           x, y, z,
-                                           yaw, pitch, roll,
-                                           data.xDot, data.yDot, data.zDot);
-
-                    _recordFlushOp = recordWriter.FlushAsync();
-                }
 
                 // Rotating index into the various history arrays
                 int[] ago = new int[history];
@@ -811,10 +796,27 @@ namespace driver
                     float commandSL = Position(slG, seatNeutralG);
                     float commandSR = Position(srG, seatNeutralG);
 
-                    Console.WriteLine("M BL {0} {1}", commandBL, blG);
-                    Console.WriteLine("M BR {0} {1}", commandBR, brG);
-                    Console.WriteLine("M SL {0} {1}", commandSL, slG);
-                    Console.WriteLine("M SR {0} {1}", commandSR, srG);
+                    if (recordWriter != null)
+                    {
+                        if (_recordFlushOp != null)
+                        {
+                            _recordFlushOp.Wait();
+                        }
+                        recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}",
+                                               t,
+                                               data.xDot, data.yDot, data.zDot,
+                                               yaw, pitch, roll,
+                                               commandBL, commandBR,
+                                               commandSL, commandSR);
+
+                        _recordFlushOp = recordWriter.FlushAsync();
+                    }
+
+                    // TODO: Convert to serial output
+                    Console.WriteLine("M BL {0}", commandBL);
+                    Console.WriteLine("M BR {0}", commandBR);
+                    Console.WriteLine("M SL {0}", commandSL);
+                    Console.WriteLine("M SR {0}", commandSR);
                 }
                 Sleep(interval);
                 ++counter;
