@@ -91,10 +91,23 @@
                               ]]
               (let [cmd (format "M %s %d\n"
                                 ch
-                                (-> val (* 100) long))]
+                                (-> val (* 10000) long))]
                 (.write output cmd)
-                (println cmd)))
-            (println "----------------\n")
+                ;; (println "T" t)
+                ;; (print cmd)
+                ))
+            ;;(println "----------------\n")
             (.flush output)
-            (.flush *out*)
+            ;;(.flush *out*)
             (recur (or tstart t) more)))))))
+
+(spit "oscillation.csv"
+      (with-out-str
+        (doseq [t (range 0.0 60 0.01)]
+          (let [pos (-> t (* 1.5) Math/sin (+ 1.0) (/ 2.0))]
+           (println (format "%f, 0, 0, 0, 0, 0, 0, %f, %f, %f, %f"
+                            t
+                            pos
+                            pos
+                            pos
+                            pos))))))
