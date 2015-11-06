@@ -93,21 +93,71 @@
                                 ch
                                 (-> val (* 10000) long))]
                 (.write output cmd)
-                ;; (println "T" t)
-                ;; (print cmd)
+                (println "T" t)
+                (print cmd)
                 ))
-            ;;(println "----------------\n")
+            (println "----------------\n")
             (.flush output)
-            ;;(.flush *out*)
+            (.flush *out*)
             (recur (or tstart t) more)))))))
 
 (spit "oscillation.csv"
       (with-out-str
         (doseq [t (range 0.0 60 0.01)]
-          (let [pos (-> t (* 1.5) Math/sin (+ 1.0) (/ 2.0))]
+          (let [pos (-> t (* 0.75) Math/sin (+ 1.0) (/ 2.0))]
            (println (format "%f, 0, 0, 0, 0, 0, 0, %f, %f, %f, %f"
                             t
                             pos
                             pos
                             pos
                             pos))))))
+
+(spit "square.csv"
+      (with-out-str
+        (doseq [t (range 0 10)]
+          (let [pos (if (even? t) 0.0 1.0)]
+            (println (format "%f, 0, 0, 0, 0, 0, 0, %f, %f, %f, %f"
+                             (float t)
+                             pos
+                             pos
+                             pos
+                             pos))))))
+
+(replay "/dev/cu.usbmodem1451" "oscillation.csv")
+(replay "/dev/cu.usbmodem1451" "square.csv")
+(replay "/dev/cu.usbmodem1451" "flight-data-1.csv")
+
+
+(defn run-test [device drive]
+  (with-open [dev-out (clojure.java.io/writer device)
+              dev-in (clojure.java.io/reader device)]
+    (.write dev-out (format "TEST BL %d\n" drive))
+    (.flush dev-out)
+    (let [[header & lines] (line-seq dev-in)]
+      (->> (loop [data []
+                  [line & more] lines]
+             (println "'" line "'")
+             (.flush *out*)
+             (if (clojure.string/blank? line)
+               data
+               (let [[t x] (map #(Long. %) (clojure.string/split line #","))]
+                 (recur (conj data {:t t :x x :drive drive}) more))))))))
+
+(defn run-tests [device drives out]
+  (->> drives
+       (mapcat #(run-test device %))
+       doall
+       (map-indexed (fn [row {:keys [drive t x]}]
+                      (format "%d,%d,%d,=B%d-B%d,=C%d-C%d,=E%d/D%d"
+                              drive t x
+                              row (inc row)
+                              row (inc row)
+                              (inc row) (inc row))))
+       (interpose "\n")
+       (apply str)
+       (spit out)))
+
+(doseq [drive ;;(range -10000 10001 1000)
+        [5000 -5000]]
+  (spit (format "/tmp/test-%d.csv" drive)
+        (run-test "/dev/cu.usbmodem1451" drive)))

@@ -6,3 +6,5 @@
 /driver/obj/Debug
 *.suo
 *.user
+specs/
+*~.skp
