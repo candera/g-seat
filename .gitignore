@@ -8,3 +8,5 @@
 *.user
 specs/
 *~.skp
+/.DS_Store
+*.stl
