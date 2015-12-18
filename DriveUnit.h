@@ -1,5 +1,11 @@
 #include "common.h"
 #include "Adafruit_PWMServoDriver.h"
+#include <Arduino.h>
+// #include "PID_v1.h"
+
+#define KP 0  // Proportional drive constant
+#define GAP 1 // Don't use drive values lower than this
+#define RES 2 // Spatial resolution
 
 class DriveUnit {
  private:
@@ -13,13 +19,17 @@ class DriveUnit {
   RotaryEncoder* _encoder;
   long _target;
   long _drive;
-  Direction _direction;
+  long _pos;
   double _v;
   double _targetV;
-  long _pos;
-  double _t;
-  double _acc = 0.001;
-  double _driveFactor = 0.01;
+  Direction _direction;
+  double _params[8];
+
+  /* // PID control */
+  /* double _pos; */
+  /* double _pidOutput; */
+  /* double _pidSetpoint; */
+  /* PID* _pid; */
 
  public:
   DriveUnit(char* channelName,
@@ -33,10 +43,28 @@ class DriveUnit {
     _chLPWM = chLPWM;
     _pwm = pwm;
     _encoder = encoder;
-    _target = 2500;
     _drive = 0;
     _channelName = channelName;
     _direction = direction;
+    _params[KP] = 1.5;
+    _params[GAP] = 1500;
+    _params[RES] = 50;
+  }
+
+  boolean setParam(char* slot, double val) {
+    if (eq(slot, "KP")) {
+      _params[KP] = val;
+    }
+    else if (eq(slot, "GAP")) {
+      _params[GAP] = val;
+    }
+    else if (eq(slot, "RES")) {
+      _params[RES] = val;
+    }
+    else {
+      return false;
+    }
+    return true;
   }
 
   void calibrate() {
@@ -45,14 +73,13 @@ class DriveUnit {
     int observed = _encoder->getPos();
     int minObserved = observed;
     long minObservedAt = millis();
-     
+
     setDrive(-3750);
 
     do {
       now = millis();
       observed = _encoder->getPos();
-      if (((_direction == Left) && (observed < minObserved)) ||
-          ((_direction == Right) && (observed > minObserved))) {
+      if (observed < minObserved) {
         minObserved = observed;
         minObservedAt = now;
       }
@@ -62,18 +89,20 @@ class DriveUnit {
     _posLow = minObserved;
     setDrive(0);
   }
-  
+
   void setup() {
     pinMode(_pinEn, OUTPUT);
 
     // TODO: Dynamic calibration
     calibrate();
-    if (_direction == Left) { 
-      _posHigh = _posLow + 340;
-    }
-    else {
-      _posHigh = _posLow - 340;
-    }
+    _posHigh = _posLow + 700;
+
+    seek(2500);
+    /* _pid = new PID(&_pos, &_pidOutput, &_pidSetpoint, */
+    /*                1.0, 0.0, 0.0, DIRECT); */
+    /* _pid->SetOutputLimits(-10000.0, 10000.0); */
+    /* //_pid->SetSampleTime(50); */
+    /* _pid->SetMode(AUTOMATIC); */
   }
 
   char* getChannelName() {
@@ -92,40 +121,29 @@ class DriveUnit {
     return _pos;
   }
 
-  long getV() {
+  double getV() {
     return _v;
-  }
-
-  double getT() {
-    return _t;
   }
 
   double getTargetV() {
     return _targetV;
   }
 
-  void setAcc(double acc) {
-    _acc = acc;
-  }
-
-  void setDriveFactor(double driveFactor) {
-    _driveFactor = driveFactor;
-  }
-
   // Set the seek position, normalized to the range [0 10000]
   void seek(long target) {
     _target = constrain(target, 0, 10000);
+    //_pidSetpoint = (double) _target;
   }
 
   // Drive is in the range -10000 to 10000. The higher it is, the more
   // time the signal spends low.
   void setDrive(long drive)
   {
-    if (_direction == Right) {
+    _drive = drive;
+
+    if (_direction == Clockwise) {
       drive *= -1;
     }
-    
-    _drive = drive;
 
     // TODO: Do we want to be braking all the time?
     if (drive == 0) {
@@ -133,15 +151,15 @@ class DriveUnit {
       _pwm->setPin(_chRPWM, 4095);
       _pwm->setPin(_chLPWM, 4095);
     }
-    else if (drive < 0) {
+    else if (drive > 0) {
       digitalWrite(_pinEn, HIGH);
       _pwm->setPin(_chLPWM, 4095);
-      _pwm->setPin(_chRPWM, map(drive, -10000, 0, 40, 4095));
+      _pwm->setPin(_chRPWM, map(drive, 10000, 0, 40, 4095));
     }
     else {
       digitalWrite(_pinEn, HIGH);
       _pwm->setPin(_chRPWM, 4095);
-      _pwm->setPin(_chLPWM, map(drive, 0, 10000, 4095, 40));
+      _pwm->setPin(_chLPWM, map(drive, 0, -10000, 4095, 40));
     }
   }
 
@@ -150,143 +168,87 @@ class DriveUnit {
     return map(raw, _posLow, _posHigh, 0, 10000);
   }
 
-  void updatePos() {
-    _pos = readPos();
-  }
+  void updateLinearWithGap() {
+    long pos = readPos();
+    long posError = _target - pos;
 
-  // Time in seconds
-  double now() {
-    return micros() / 1000000.0;
-  }
-  
-  void updateAdaptive() {
-    // Everything is normalized to the range either 0-10000 or -10000-10000,
-    // depending on which makes more sense.
-    // The encoder, of course, just counts up and down.
-
-    // t: seconds
-    // v: units/sec
-
-    static long t0 = micros();
-    static long pos0 = readPos();
-    static double v0 = 0;
-
-    long pos1 = readPos();
-    double t1 = now();
-    double dt = t1 - t0;
-    double v1 = (pos1 - pos0) / dt; // TODO: Smooth this?
-    v1 = (v1 * 0.1) + (v0 * 0.9);
-    double a1 = (v1 - v0) / dt;
-
-    long x1 = pos1 - _target;
-    long x2 = x1 + v1 * 0.1;
-    double vt = constrain(-x2 * 0.01, -250, 250);
-    /* if (x2 > 0) { */
-    /*   vt *= -1; */
-    /* } */
-
-    double a = _acc * x1;
-    double b = _acc * v1 * dt;
-    double c = 0.5 * _acc * dt * dt;
-
-    double a2 = -(a + b + v1)/(dt + c);
-
-    // long driveAdjustment = (a2 - a1) * _driveFactor * dt;
-    //long driveAdjustment = (vt - v1) * _driveFactor;
-
-    if ((x1 < 100) && (x1 > -100) && (v1 < 1)) {
-      _drive = 0;
-    }
-    else {
-      if ((abs(v1) > (abs(vt) * 1.5)) ||
-          (abs(v1) < (abs(vt) * 0.50))) {
-        
-        long driveTarget;
-        if (vt > v1) {
-          if (x1 < 0) {
-            driveTarget = 10000;
-          }
-          else {
-            driveTarget = 0;
-          }
-        }
-        else {
-          if (x1 < 0) {
-            driveTarget = 0;
-          }
-          else {
-            driveTarget = -10000;
-          }
-        }
-        if (driveTarget == 0) {
-          if (x1 < 0) {
-            _drive = -100;
-          }
-          else {
-            _drive = 100;
-          }
-        }
-        else {
-          _drive = ((1.0 - _driveFactor) * _drive) +
-            (_driveFactor * driveTarget);
-        }
-      }
-      /* if (vt > 0) { */
-      /*   _drive = constrain(_drive + driveAdjustment, 0, 10000); */
-      /* } */
-      /* else { */
-      /*   _drive = constrain(_drive + driveAdjustment, -10000, 0); */
-      /* } */
-    }
-
-    _v = v1;
-    _targetV = vt;
-    _pos = pos1;
-    _t = t1;
-
-    t0 = t1;
-    pos0 = pos1;
-    v0 = v1;
-  }
-
-  void linearUpdate() {
-    static long lastT = micros();
-    static long lastPos = readPos();
-    static double lastV = 0;
-
-    _pos = readPos();
-    _t = now();
-    _v = (lastPos - _pos) / (lastT - _t);
-
-    long diff = _target - _pos;
-    _targetV = diff;
-
-    long drive;
-    if ((diff < 50) && (diff > -50)) {
+    long drive = posError * _params[KP];
+    // Ignore the center of the drive region - it doesn't move at all
+    long gap = (long) _params[GAP];
+    if ((abs(posError) < (long) _params[RES]) || (abs(drive) < 2)) {
       drive = 0;
     }
-    else if (diff > 0) {
-      drive = map(diff, 0, 2000, 1200, 10000);
+    else if (drive > 0) {
+      drive = (drive * (10000 - gap) / 10000) + gap;
     }
-    else {
-      drive = map(diff, 0, -2000, -1200, -10000); 
+    else if (drive < 0) {
+      drive = (drive * (10000 - gap) / 10000) - gap;
     }
 
-    if (drive > 0) {
-      drive = (long) sqrt((double)drive);
-    }
-    else {
-      drive = - (long) sqrt((double) -drive);
-    }
-      
-    _drive = constrain((long) (drive * _driveFactor), -10000, 10000);
+    setDrive(constrain(drive, -10000, 10000));
 
-    lastT = _t;
-    lastPos = _pos;
-    lastV = _v;
   }
 
   void update() {
-    updateAdaptive();
+    updateLinearWithGap();
   }
+
+  void updateBroken() {
+    static long lastT = millis();
+    static long lastPos = readPos();
+    long decisionTime = 100; // msec
+    double kv = 0.001; // Controls how quickly velocity should change
+                    // based on position from target. [units/ms]
+    double kd = 12.0;  // How much should we change the drive per unit of
+                    // velocity we're off by?
+
+    long t = millis();
+    _pos = readPos();
+    long deltaT = t - lastT;
+    if (deltaT > decisionTime) {
+      _v = (_pos - lastPos) / (double) deltaT;
+      long posErr = _target - _pos;
+      if (abs(posErr) < 150) {
+        _targetV = 0;
+      }
+      else {
+        _targetV = posErr * kv;
+      }
+
+      double deltaV = _targetV - _v;
+
+      long drive = constrain((long) (_drive + (deltaV * abs(deltaV) * kd)),
+                             -10000, 10000);
+
+      setDrive(drive);
+
+      lastT = t;
+      lastPos = _pos;
+    }
+  }
+
+  void printDiagnosticHeader() {
+    Serial.println("ch,         t,       pos,    target,     drive,         v,   targetV");
+  }
+
+  void printDiagnostics() {
+    char buf[128];
+    /* char ts[32]; */
+    /* dtos(ts, micros() / 1000000.0); */
+    char vs[32];
+    dtos(vs, _v);
+    char tvs[32];
+    dtos(tvs, _targetV);
+    sprintf(buf, "%2s,%10ld,%10ld,%10ld,%10ld,%10s,%10s",
+            _channelName,
+            //ts,
+            micros(),
+            readPos(),
+            _target,
+            _drive,
+            vs,
+            tvs);
+    Serial.println(buf);
+  }
+
 };

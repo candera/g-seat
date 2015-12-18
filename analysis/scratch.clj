@@ -52,5 +52,9 @@
   (two-axis-chart :t "t" :pos "pos" :drive "drive" data)
   (two-axis-chart :t "t" :pos "pos" :v "v" data))
 
-
+(let [data (run-data-command "/dev/cu.usbmodem1451" "M BL 7000\n")]
+  (two-axis-chart :t "t" :drive "drive" :v "v" data)
+  (two-axis-chart :t "t" :target-v "target-v" :v "v" data)
+  (two-axis-chart :t "t" :pos "pos" :drive "drive" data)
+  (two-axis-chart :t "t" :pos "pos" :v "v" data))
 

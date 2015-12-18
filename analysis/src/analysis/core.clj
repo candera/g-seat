@@ -24,7 +24,7 @@
              (debug "'" line "'")
              (if (clojure.string/blank? line)
                data
-               (let [[ch t pos target v target-v d]
+               (let [[ch t pos target d v target-v]
                      (->> (clojure.string/split line #",")
                           (map clojure.string/trim))
                      start (or start (Double. t))]

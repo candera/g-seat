@@ -18,12 +18,17 @@ const int encoderCount = sizeof(encoders)/sizeof(RotaryEncoder*);
 
 Adafruit_PWMServoDriver pwm(0x40);
 
+#define NORMAL 0
+#define DEBUG 1
+
+int _mode = NORMAL;
+
 long _debug = 0;
 long _diagnosticsUntil;
 
 DriveUnit* driveUnits[] = {
-  //            Ch,    Dir, En, RPWM, LPWM, pwm, encoder
-  new DriveUnit("BL", Left,  5,    0,    1, &pwm, encoders[0])
+  //            Ch,   Dir,              En, RPWM, LPWM, pwm, encoder
+  new DriveUnit("BL", CounterClockwise,  5,    0,    1, &pwm, encoders[0])
 };
 
 const int driveUnitCount = sizeof(driveUnits)/sizeof(DriveUnit*);
@@ -52,10 +57,6 @@ Token nextToken(char* s) {
 
 Token nextToken(Token t) {
   return nextToken(t.next);
-}
-
-boolean eq(char* s1, char* s2) {
-  return strcmp(s1, s2) == 0;
 }
 
 DriveUnit* lookupUnit(char* channelName) {
@@ -105,13 +106,7 @@ void runTest2(DriveUnit* u, int drive1, int drive2)
       drive = drive2;
       u->setDrive(drive);
     }
-    printDiagnostics(u->getChannelName(),
-                     u->getT(),
-                     u->getPos(),
-                     u->getTarget(),
-                     u->getV(),
-                     u->getTargetV(),
-                     drive);
+    u->printDiagnostics();
     lastPos = pos;
     u->update();
     delay(20);
@@ -169,13 +164,7 @@ void runTest(DriveUnit* u, long drive)
         u->setDrive(drive);
       }
     }
-    printDiagnostics(u->getChannelName(),
-                     u->getT(),
-                     u->getPos(),
-                     u->getTarget(),
-                     u->getV(),
-                     u->getTargetV(),
-                     drive);
+    u->printDiagnostics();
     //delay(10);
   } while (((now - start) < 10000000) &&
            ((up && (pos > 500)) ||
@@ -225,22 +214,25 @@ void dispatchCommand(char* command) {
     DriveUnit* unit = lookupUnit(t.val);
     if (unit != NULL) {
       t = nextToken(t);
-      if (eq(t.val, "ACC")) {
-        t = nextToken(t);
-        double acc = atof(t.val);
-        unit->setAcc(acc);
-        // EEPROM_writeAnything(0, acc);
-        Serial.print("ACC set to ");
-        Serial.println(acc);
+
+      char slot[16];
+      strcpy(slot, t.val);
+      t = nextToken(t);
+      double val = atof(t.val);
+
+      boolean result = unit->setParam(slot, val);
+
+      if (!result) {
+        Serial.print("ERROR: Could not set param ");
       }
-      else if (eq(t.val, "DF")) {
-        t = nextToken(t);
-        double df = atof(t.val);
-        unit->setDriveFactor(df);
-        // EEPROM_writeAnything(sizeof(double), df);
-        Serial.print("DF set to ");
-        Serial.println(df);
+      else {
+        Serial.print("Set param ");
       }
+      Serial.print(slot);
+      Serial.print(" to value ");
+      Serial.print(val);
+      Serial.print(" for channel ");
+      Serial.println(unit->getChannelName());
     }
   }
   else if (eq(directive, "DR")) {
@@ -259,6 +251,19 @@ void dispatchCommand(char* command) {
   else if (eq(directive, "Q")) {
     printDiagnosticHeader();
     printDiagnostics();
+  }
+  else if (eq(directive, "MODE")) {
+    t = nextToken(t);
+    if (eq(t.val, "NORMAL")) {
+      _mode = NORMAL;
+    }
+    else if (eq(t.val, "DEBUG")) {
+      _mode = DEBUG;
+    }
+    else {
+      Serial.print("Unrecognized mode: ");
+      Serial.println(t.val);
+    }
   }
   else if (eq(directive, "?")) {
     //Serial.println(encoders[0]->getPos());
@@ -299,42 +304,14 @@ void dispatchCommand(char* command) {
 }
 
 void printDiagnosticHeader() {
-  Serial.println("ch,         t,       pos,    target,         v,   targetV,     drive");
+  driveUnits[0]->printDiagnosticHeader();
 }
 
 void printDiagnostics() {
   for (int i = 0; i < driveUnitCount; ++i) {
     DriveUnit* unit = driveUnits[i];
-    printDiagnostics(unit->getChannelName(),
-                     unit->getT(),
-                     unit->getPos(),
-                     unit->getTarget(),
-                     unit->getV(),
-                     unit->getTargetV(),
-                     unit->getDrive());
+    unit->printDiagnostics();
   }
-}
-
-void printDiagnostics(char* ch, double t, long pos,
-                      long target, double v,
-                      double targetV, long drive)
-{                      
-  char buf[128];
-  char ts[32];
-  dtos(ts, t);
-  char vs[32];
-  dtos(vs, v);
-  char tvs[32];
-  dtos(tvs, targetV);
-  sprintf(buf, "%2s,%10s,%10ld,%10ld,%10s,%10s,%10ld",
-          ch,
-          ts,
-          pos,
-          target,
-          vs,
-          tvs,
-          drive);
-  Serial.println(buf);
 }
 
 void timerIsr() {
@@ -395,10 +372,12 @@ void loop() {
     }
   }
 
-  for (int i = 0; i < driveUnitCount; ++i) {
-    DriveUnit* u = driveUnits[i];
-    u->update();
-    //u->setDrive(u->getDrive());
+  if (_mode == NORMAL) {
+    for (int i = 0; i < driveUnitCount; ++i) {
+      DriveUnit* u = driveUnits[i];
+      u->update();
+      //u->setDrive(u->getDrive());
+    }
   }
 
   static bool printHeader = true;

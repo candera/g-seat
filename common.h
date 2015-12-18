@@ -10,8 +10,8 @@ enum LogLevel {
 LogLevel _logLevel = Info;
 
 enum Direction {
-  Left,
-  Right
+  Clockwise,
+  CounterClockwise
 };
 
 typedef struct token_s {
@@ -72,4 +72,9 @@ template <class T> int EEPROM_readAnything(int ee, T& value)
 void dtos(char* buf, double val) {
   dtostrf(val, 10, 4, buf);
 }
+
+boolean eq(char* s1, char* s2) {
+  return strcmp(s1, s2) == 0;
+}
+
 #endif
