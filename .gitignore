@@ -10,3 +10,5 @@ specs/
 *~.skp
 /.DS_Store
 /models/mounting-plate.stl
+.DS_Store
+*.stl
