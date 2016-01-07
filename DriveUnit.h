@@ -6,6 +6,8 @@
 #define KP 0  // Proportional drive constant
 #define GAP 1 // Don't use drive values lower than this
 #define RES 2 // Spatial resolution
+#define KVTARGET 3  // Multiplier for target velocity as function of positional error
+#define KVBOOST 4 // How much to boost drive per velocity error
 
 class DriveUnit {
  private:
@@ -19,6 +21,7 @@ class DriveUnit {
   RotaryEncoder* _encoder;
   long _target;
   long _drive;
+  long _boost;
   long _pos;
   double _v;
   double _targetV;
@@ -46,9 +49,12 @@ class DriveUnit {
     _drive = 0;
     _channelName = channelName;
     _direction = direction;
+    _boost = 0;
     _params[KP] = 1.5;
     _params[GAP] = 1500;
     _params[RES] = 50;
+    _params[KVTARGET] = 1.0;
+    _params[KVBOOST] = 1.0;
   }
 
   boolean setParam(char* slot, double val) {
@@ -60,6 +66,12 @@ class DriveUnit {
     }
     else if (eq(slot, "RES")) {
       _params[RES] = val;
+    }
+    else if (eq(slot, "KVTARGET")) {
+      _params[KVTARGET] = val;
+    }
+    else if (eq(slot, "KVBOOST")) {
+      _params[KVBOOST] = val;
     }
     else {
       return false;
@@ -190,7 +202,57 @@ class DriveUnit {
   }
 
   void update() {
-    updateLinearWithGap();
+    //updateLinearWithGap();
+
+    static long lastPos = readPos();
+    static long lastT = millis();
+
+    long pos = readPos();
+    long posError = _target - pos;
+
+    long pDrive = posError * _params[KP];
+
+    long t = millis();
+    long deltaT = t - lastT;
+    long deltaX = pos - lastPos;
+    double v = 0.0;
+    if (deltaT != 0) {
+      v = deltaX / deltaT;
+    }
+
+    _targetV = posError * _params[KVTARGET];
+    double deltaV = _targetV - v;
+    deltaV = constrain(deltaV, -10.0, 10.0);
+
+    if (abs(posError) > 1000) {
+      _boost = 0;
+    }
+    else {
+      _boost += (_targetV - v) * _params[KVBOOST];
+      _boost = constrain(boost,
+                        (posError < 0) ? -2000 : 0,
+                        (posError < 0) ? 0 : 1000);
+    }
+
+    long drive = pDrive + _boost;
+
+    // Ignore the center of the drive region - it doesn't move at all
+    long gap = (long) _params[GAP];
+    if ((abs(posError) < (long) _params[RES]) || (abs(drive) < 2)) {
+      drive = 0;
+    }
+    else if (drive > 0) {
+      drive = (drive * (10000 - gap) / 10000) + gap;
+    }
+    else if (drive < 0) {
+      drive = (drive * (10000 - gap) / 10000) - gap;
+    }
+
+    setDrive(constrain(drive, -10000, 10000));
+
+    lastPos = pos;
+    lastT = t;
+
   }
 
   void updateBroken() {
@@ -228,7 +290,17 @@ class DriveUnit {
   }
 
   void printDiagnosticHeader() {
-    Serial.println("ch,         t,       pos,    target,     drive,         v,   targetV");
+    char buf[128];
+    sprintf(buf, "%2s,%10s,%10s,%10s,%10s,%10s,%10s,%10s",
+            "ch",
+            "t",
+            "pos",
+            "target",
+            "drive",
+            "boost",
+            "v",
+            "targetV");
+    Serial.println(buf);
   }
 
   void printDiagnostics() {
@@ -239,13 +311,14 @@ class DriveUnit {
     dtos(vs, _v);
     char tvs[32];
     dtos(tvs, _targetV);
-    sprintf(buf, "%2s,%10ld,%10ld,%10ld,%10ld,%10s,%10s",
+    sprintf(buf, "%2s,%10ld,%10ld,%10ld,%10ld,%10ld,%10s,%10s",
             _channelName,
             //ts,
             micros(),
             readPos(),
             _target,
             _drive,
+            _boost,
             vs,
             tvs);
     Serial.println(buf);
