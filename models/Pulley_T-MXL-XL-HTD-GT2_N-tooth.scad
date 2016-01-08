@@ -28,8 +28,8 @@ m3_nut_depth = 2.7;     // normal M3 hex nut exact depth = 2.4, nyloc = 4
 
 
 pulley_t_ht = 12;       // length of toothed part of pulley, standard = 12
-pulley_b_ht = 1.5;                // pulley base height, standard = 8. Set to same as idler_ht if you want an idler but no pulley.
-pulley_b_dia = 20;      // pulley base diameter, standard = 20
+pulley_b_ht = 4.5;                // pulley base height, standard = 8. Set to same as idler_ht if you want an idler but no pulley.
+pulley_b_dia = 33;      // pulley base diameter, standard = 20
 no_of_nuts = 0;         // number of captive nuts required, standard = 1
 nut_angle = 90;         // angle between nuts, standard = 90
 nut_shaft_distance = 1.2;       // distance between inner face of nut and shaft, can be negative.

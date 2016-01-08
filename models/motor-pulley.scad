@@ -20,7 +20,7 @@ difference () {
   pulley ( "HTD 5mm" , tooth_spacing(teeth,5,0.5715) , 2.199 , 3.781, profile, teeth, motor_shaft, retainer, retainer_ht, idler, idler_ht );
   translate ([0,0,-0.01]) {
     color ([1,0,0,1]) {
-      cylinder(h=4, r1=5.5, r2=6);
+      cylinder(h=8, r1=6, r2=5);
     }
   }
   translate ([0,0,5]) {
