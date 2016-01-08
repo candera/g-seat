@@ -1,10 +1,10 @@
 use <Pulley_T-MXL-XL-HTD-GT2_N-tooth.scad>;
 
 tooth_pitch = 5.0;
-num_teeth = 6;
+num_teeth = 5;
 height = 12;
 belt_thickness = 3.8; 
-wall_thickness = 4;
+wall_thickness = 5;
 screw_diameter = 2.5;
 
 translate ([0,0,wall_thickness]) {
@@ -22,9 +22,9 @@ translate ([0,0,wall_thickness]) {
       }
     }
     translate([0,width(belt_thickness,wall_thickness) + wall_thickness,-wall_thickness])
-      holes(screw_diameter, wall_thickness, num_teeth, tooth_pitch, belt_thickness, wall_thickness);
+      holes(screw_diameter+0.2, wall_thickness, num_teeth, tooth_pitch, belt_thickness, wall_thickness);
     translate([0,0,-wall_thickness])
-      holes(screw_diameter * 0.75, height + 2 * wall_thickness, num_teeth, tooth_pitch, belt_thickness, wall_thickness);
+      holes(screw_diameter, height + 2 * wall_thickness, num_teeth, tooth_pitch, belt_thickness, wall_thickness);
   }
 }
 
