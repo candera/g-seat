@@ -1,6 +1,5 @@
 #include <Wire.h>
 #include <Arduino.h>
-#include <EEPROM.h>
 #include "common.h"
 #include "Adafruit_PWMServoDriver.h"
 #include <stdio.h>
@@ -147,7 +146,6 @@ void runTest(DriveUnit* u, long drive)
   bool switched = false;
   char buffer[128];
   u->setDrive(drive);
-  printDiagnosticHeader();
   do {
     now = micros();
     u->update();
@@ -249,7 +247,6 @@ void dispatchCommand(char* command) {
     }
   }
   else if (eq(directive, "Q")) {
-    printDiagnosticHeader();
     printDiagnostics();
   }
   else if (eq(directive, "MODE")) {
@@ -301,10 +298,6 @@ void dispatchCommand(char* command) {
     Serial.print("Invalid command - ignoring: ");
     Serial.println(command);
   }
-}
-
-void printDiagnosticHeader() {
-  driveUnits[0]->printDiagnosticHeader();
 }
 
 void printDiagnostics() {
@@ -380,13 +373,8 @@ void loop() {
     }
   }
 
-  static bool printHeader = true;
   static bool printNewline = false;
   if (micros() < _diagnosticsUntil) {
-    if (printHeader) {
-      printDiagnosticHeader();
-      printHeader = false;
-    }
     printDiagnostics();
     printNewline = true;
   }
@@ -396,7 +384,6 @@ void loop() {
       Serial.println();
       printNewline = false;
     }
-    printHeader = true;
   }
 
   //delay(50);

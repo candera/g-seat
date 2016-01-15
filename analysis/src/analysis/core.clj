@@ -12,6 +12,16 @@
 ;; (def debug println)
 (def debug (constantly nil))
 
+(def converters
+  (let [d #(Double. %)
+        l #(Long. %)]
+    {:t        d
+     :pos      l
+     :target   l
+     :v        d
+     :target-v d
+     :drive    d}))
+
 (defn run-data-command [device cmd]
   (with-open [dev-out (clojure.java.io/writer device)
               dev-in (clojure.java.io/reader device)]
@@ -19,24 +29,26 @@
     (.flush dev-out)
     (let [[header & lines] (line-seq dev-in)]
       (->> (loop [data []
-                  start nil
                   [line & more] lines]
              (debug "'" line "'")
              (if (clojure.string/blank? line)
                data
-               (let [[ch t pos target d v target-v]
-                     (->> (clojure.string/split line #",")
-                          (map clojure.string/trim))
-                     start (or start (Double. t))]
-                 (recur (conj data
-                              {:ch ch
+               (let [sample (->> (clojure.string/split line #",")
+                                 (map clojure.string/trim)
+                                 (map #(clojure.string/split % #"="))
+                                 (map (fn [[k v]]
+                                        (let [k*        (keyword k)
+                                              converter (get converters k* identity)]
+                                          [k* (converter v)])))
+                                 (into (sorted-map)))]
+                 (recur (conj data sample
+                              #_{:ch ch
                                :t (- (Double. t) start)
                                :pos (Long. pos)
                                :target (Long. target)
                                :v (Double. v)
                                :target-v (Double. target-v)
                                :drive (Long. d)})
-                        start
                         more))))))))
 
 (defn run-test [device drive]

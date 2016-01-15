@@ -215,21 +215,21 @@ class DriveUnit {
     long t = millis();
     long deltaT = t - lastT;
     long deltaX = pos - lastPos;
-    double v = 0.0;
+    _v = 0.0;
     if (deltaT != 0) {
-      v = deltaX / deltaT;
+      _v = deltaX / deltaT;
     }
 
     _targetV = posError * _params[KVTARGET];
-    double deltaV = _targetV - v;
+    double deltaV = _targetV - _v;
     deltaV = constrain(deltaV, -10.0, 10.0);
 
     if (abs(posError) > 1000) {
       _boost = 0;
     }
     else {
-      _boost += (_targetV - v) * _params[KVBOOST];
-      _boost = constrain(boost,
+      _boost += deltaV * _params[KVBOOST];
+      _boost = constrain(_boost,
                         (posError < 0) ? -2000 : 0,
                         (posError < 0) ? 0 : 1000);
     }
@@ -289,20 +289,6 @@ class DriveUnit {
     }
   }
 
-  void printDiagnosticHeader() {
-    char buf[128];
-    sprintf(buf, "%2s,%10s,%10s,%10s,%10s,%10s,%10s,%10s",
-            "ch",
-            "t",
-            "pos",
-            "target",
-            "drive",
-            "boost",
-            "v",
-            "targetV");
-    Serial.println(buf);
-  }
-
   void printDiagnostics() {
     char buf[128];
     /* char ts[32]; */
@@ -311,7 +297,7 @@ class DriveUnit {
     dtos(vs, _v);
     char tvs[32];
     dtos(tvs, _targetV);
-    sprintf(buf, "%2s,%10ld,%10ld,%10ld,%10ld,%10ld,%10s,%10s",
+    sprintf(buf, "ch=%s,t=%ld,pos=%ld,target=%ld,drive=%ld,boost=%ld,v=%s,target-v=%s",
             _channelName,
             //ts,
             micros(),
