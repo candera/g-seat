@@ -1,17 +1,19 @@
 #include <Wire.h>
 #include <Arduino.h>
-#include <EEPROM.h>
+//#include <EEPROM.h>
 #include "common.h"
 #include "Adafruit_PWMServoDriver.h"
 #include <stdio.h>
-#include "TimerThree.h"
+//#include "TimerThree.h"
+#include "DueTimer/DueTimer.h"
 #include "RotaryEncoder.h"
 #include "DriveUnit.h"
 
 #define DEBUG TRUE
 
 RotaryEncoder* encoders[] = {
-  new RotaryEncoder(F, 7, F, 6)
+  new RotaryEncoder(22, 23),
+  new RotaryEncoder(24, 25)
 };
 
 const int encoderCount = sizeof(encoders)/sizeof(RotaryEncoder*);
@@ -27,8 +29,9 @@ long _debug = 0;
 long _diagnosticsUntil;
 
 DriveUnit* driveUnits[] = {
-  //            Ch,   Dir,              En, RPWM, LPWM, pwm, encoder
-  new DriveUnit("BL", CounterClockwise,  5,    0,    1, &pwm, encoders[0])
+  //            Ch,   Dir,              En, RPWM, LPWM,  pwm, encoder
+  new DriveUnit("BL", CounterClockwise,  26,   0,    1, &pwm, encoders[0]),
+  new DriveUnit("BR", Clockwise,         27,   2,    3, &pwm, encoders[1])
 };
 
 const int driveUnitCount = sizeof(driveUnits)/sizeof(DriveUnit*);
@@ -147,7 +150,6 @@ void runTest(DriveUnit* u, long drive)
   bool switched = false;
   char buffer[128];
   u->setDrive(drive);
-  printDiagnosticHeader();
   do {
     now = micros();
     u->update();
@@ -181,6 +183,7 @@ void dispatchCommand(char* command) {
   Token t = nextToken(command);
   char* directive = t.val;
 
+  // TEST
   if (eq(directive, "TEST")) {
     t = nextToken(t);
     DriveUnit* u = lookupUnit(t.val);
@@ -190,6 +193,7 @@ void dispatchCommand(char* command) {
       runTest(u, drive);
     }
   }
+  // M CH TARGET - Move channel CH to position TARGET
   else if (eq(directive, "M")) {
     t = nextToken(t);
 
@@ -203,11 +207,13 @@ void dispatchCommand(char* command) {
       _diagnosticsUntil = micros() + 2000000;
     }
   }
+  // MONITOR DURATION - spit out stats for the next DURATION milliseconds
   else if (eq(directive, "MONITOR")) {
     t = nextToken(t);
     long msec = atol(t.val);
     _diagnosticsUntil = micros() + (1000 * msec);    
   }
+  // CONFIG CH NAME VALUE - Set configuration param NAME to VALUE for CH
   else if (eq(directive, "CONFIG")) {
     t = nextToken(t);
 
@@ -235,6 +241,7 @@ void dispatchCommand(char* command) {
       Serial.println(unit->getChannelName());
     }
   }
+  // DR CH DRIVE - Set drive for CH to DRIVE
   else if (eq(directive, "DR")) {
     Serial.println("DR");
     t = nextToken(t);
@@ -248,10 +255,11 @@ void dispatchCommand(char* command) {
       unit->setDrive(target);
     }
   }
+  // Q - Print diagnostics
   else if (eq(directive, "Q")) {
-    printDiagnosticHeader();
     printDiagnostics();
   }
+  // MODE [ NORMAL | DEBUG ] - Set mode to NORMAL or DEBUG
   else if (eq(directive, "MODE")) {
     t = nextToken(t);
     if (eq(t.val, "NORMAL")) {
@@ -265,6 +273,7 @@ void dispatchCommand(char* command) {
       Serial.println(t.val);
     }
   }
+  // ? - Debug command
   else if (eq(directive, "?")) {
     //Serial.println(encoders[0]->getPos());
     Serial.print("Next: '");
@@ -288,23 +297,23 @@ void dispatchCommand(char* command) {
     Serial.print(t.val);
     Serial.println("'");
   }
+  // LOG DEBUG - Set log level to DEBUG
   else if (eq(directive, "LOG DEBUG")) {
     _logLevel = Debug;
   }
+  // LOG INFO - Set log level to INFO
   else if (eq(directive, "LOG INFO")) {
     _logLevel = Info;
   }
+  // PING - Tell a client who we are
   else if (eq(directive, "PING")) {
     Serial.println("ACK G-SEAT");
   }
+  // Error case
   else {
     Serial.print("Invalid command - ignoring: ");
     Serial.println(command);
   }
-}
-
-void printDiagnosticHeader() {
-  driveUnits[0]->printDiagnosticHeader();
 }
 
 void printDiagnostics() {
@@ -327,8 +336,7 @@ void setup() {
     encoders[i]->setup();
   }
 
-  Timer3.initialize();
-  Timer3.attachInterrupt(timerIsr, 80);
+  Timer3.attachInterrupt(timerIsr).setFrequency(80).start();
 
   pwm.begin();
   pwm.setPWMFreq(1600);
@@ -380,13 +388,8 @@ void loop() {
     }
   }
 
-  static bool printHeader = true;
   static bool printNewline = false;
   if (micros() < _diagnosticsUntil) {
-    if (printHeader) {
-      printDiagnosticHeader();
-      printHeader = false;
-    }
     printDiagnostics();
     printNewline = true;
   }
@@ -396,7 +399,6 @@ void loop() {
       Serial.println();
       printNewline = false;
     }
-    printHeader = true;
   }
 
   //delay(50);
