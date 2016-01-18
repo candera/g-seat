@@ -12,3 +12,4 @@ specs/
 /models/mounting-plate.stl
 .DS_Store
 *.stl
+*.userprefs

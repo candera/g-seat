@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Ports;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace driver
@@ -514,13 +516,13 @@ namespace driver
 
     /* I made my own because I wrote this on a Mac and Mono
         doesn't have the Microsoft libs. */
-    struct Vector3D
+    public struct Vector3D
     {
-        public float X { get; }
-        public float Y { get; }
-        public float Z { get; }
+        public double X { get; }
+        public double Y { get; }
+        public double Z { get; }
 
-        public Vector3D(float x, float y, float z)
+        public Vector3D(double x, double y, double z)
         {
             X = x;
             Y = y;
@@ -530,19 +532,19 @@ namespace driver
 
     struct Matrix3D
     {
-        public float M11 { get; }
-        public float M12 { get; }
-        public float M13 { get; }
-        public float M21 { get; }
-        public float M22 { get; }
-        public float M23 { get; }
-        public float M31 { get; }
-        public float M32 { get; }
-        public float M33 { get; }
+        public double M11 { get; }
+        public double M12 { get; }
+        public double M13 { get; }
+        public double M21 { get; }
+        public double M22 { get; }
+        public double M23 { get; }
+        public double M31 { get; }
+        public double M32 { get; }
+        public double M33 { get; }
 
-        public Matrix3D(float m11, float m12, float m13,
-                        float m21, float m22, float m23,
-                        float m31, float m32, float m33)
+        public Matrix3D(double m11, double m12, double m13,
+                        double m21, double m22, double m23,
+                        double m31, double m32, double m33)
         {
             M11 = m11;
             M12 = m12;
@@ -559,31 +561,31 @@ namespace driver
 
     static class Program
     {
-        public static float sin(float rad)
+        public static double sin(double rad)
         {
-            return (float) Math.Sin(rad);
+            return (double) Math.Sin(rad);
         }
 
-        public static float cos(float rad)
+        public static double cos(double rad)
         {
-            return (float) Math.Cos(rad);
+            return (double) Math.Cos(rad);
         }
 
-        public static float ToRadians(float deg)
+        public static double ToRadians(double deg)
         {
             //  (/ (* deg Math/PI) 180.0))
-            return (float) (deg * 3.1415926F) / 180.0F;
+            return (double) (deg * 3.1415926F) / 180.0;
         }
 
-        public static float ToDegrees(float rad)
+        public static double ToDegrees(double rad)
         {
             //  (/ (* deg Math/PI) 180.0))
-            return (float) (rad * 180.0F) / 3.1415926F;
+            return (double) (rad * 180.0) / 3.1415926;
         }
 
-        public static float Dot(Vector3D a, Vector3D b)
+        public static double Dot(Vector3D a, Vector3D b)
         {
-            return (float) (a.X * b.X + a.Y * b.Y + a.Z * b.Z);
+            return (double) (a.X * b.X + a.Y * b.Y + a.Z * b.Z);
         }
 
         public static Vector3D Transform(Matrix3D m, Vector3D v)
@@ -603,7 +605,7 @@ namespace driver
             return new Vector3D(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
         }
 
-        public static Vector3D Scale(Vector3D v, float s)
+        public static Vector3D Scale(Vector3D v, double s)
         {
             return new Vector3D(v.X * s, v.Y * s, v.Z * s);
         }
@@ -612,14 +614,14 @@ namespace driver
         ///   Returns a Matrix3D for the specified yaw, pitch, and
         ///   roll, which are in radians.
         /// </summary>
-        static Matrix3D YPR(float yaw, float pitch, float roll)
+        static Matrix3D YPR(double yaw, double pitch, double roll)
         {
-            float sy = sin(yaw);
-            float cy = cos(yaw);
-            float sp = sin(pitch);
-            float cp = cos(pitch);
-            float sr = sin(roll);
-            float cr = cos(roll);
+            double sy = sin(yaw);
+            double cy = cos(yaw);
+            double sp = sin(pitch);
+            double cp = cos(pitch);
+            double sr = sin(roll);
+            double cr = cos(roll);
 
             return new Matrix3D(cp * cy,
                                 (cy * sp * sr) - (sy * cr),
@@ -634,33 +636,33 @@ namespace driver
                                 cr * cp);
         }
 
-        static float Map(float val, float in1, float in2, float out1, float out2)
+        static double Map(double val, double in1, double in2, double out1, double out2)
         {
             // TODO: Make this nonlinear if need be
             return ((val - in1) / (in2 - in1)) * (out2 - out1) + out1;
         }
 
-        static float Clamp(float val, float min, float max)
+        static double Clamp(double val, double min, double max)
         {
-            return (float) Math.Max(Math.Min(val, max), min);
+            return (double) Math.Max(Math.Min(val, max), min);
         }
 
-        static float Nonlinear(float x)
+        static double Nonlinear(double x)
         {
-            return 1.0F - (1.0F / (x + 1.0F));
+            return 1.0 - (1.0 / (x + 1.0));
         }
 
-        public static float Position(float g, float baseG)
+        public static long Position(double g, double baseG)
         {
             if (g > baseG)
             {
-                return Map(Nonlinear(g - baseG),
-                           0, 1, 0.25F, 1.0F);
+                return (long) Map(Nonlinear(g - baseG),
+                                  0, 1, 2500, 10000);
             }
             else
             {
-                return Map(Nonlinear(baseG - g),
-                           0, 1, 0.25F, 0);
+                return (long) Map(Nonlinear(baseG - g),
+                                  0, 1, 2500, 0);
             }
         }
 
@@ -673,15 +675,15 @@ namespace driver
         /// <summary>
         ///   Time in seconds from some point
         /// </summary>
-        static float Now()
+        static double Now()
         {
-            return (DateTime.Now.Ticks - _startTicks) / 10000000.0F;
+            return (DateTime.Now.Ticks - _startTicks) / 10000000.0;
         }
 
         /// <summary>
         ///   Returns FlightData and a time
         /// </summary>
-        static Func<Tuple<FlightData,float>> BMSSource()
+        static Func<Tuple<FlightData,double>> BMSSource()
         {
             SharedMemory memoryArea1 = new SharedMemory("FalconSharedMemoryArea");
             SharedMemory memoryArea2 = new SharedMemory("FalconSharedMemoryArea2");
@@ -696,22 +698,23 @@ namespace driver
         }
 
         static Task _recordFlushOp = null;
-        static void Drive(Func<Tuple<FlightData, float>> source, TextWriter recordWriter)
+        static void Drive(Func<Tuple<FlightData, double>> source, TextWriter recordWriter, Action<String> transmit, Action<Stats> reportStats)
         {
             // How long to sleep between polling, in ms
-            int interval = 100;
+            int interval = 50;
 
             int history = 3;
-            float[] ts = new float[history];
+            double[] ts = new double[history];
             // Yaw, pitch, roll
             Vector3D[] seats = new Vector3D[history];
             Vector3D[] vAirframe = new Vector3D[history];
             Vector3D[] vSeats = new Vector3D[history];
+            Vector3D[] fs = new Vector3D[history];
             long counter = 0;
 
-            float deg20 = ToRadians(20);
-            float deg6 = ToRadians(6);
-            float G = 32.174F;
+            double deg20 = ToRadians(20);
+            double deg6 = ToRadians(6);
+            double G = 32.174F;
 
             Vector3D gravity = new Vector3D(0, 0, G);
 
@@ -720,8 +723,8 @@ namespace driver
             Vector3D seatPos = new Vector3D(10, 0, -3);
 
             // The G force on the various parts of the seat when at rest.
-            float backNeutralG = sin(deg20);
-            float seatNeutralG = cos(deg6);
+            double backNeutralG = sin(deg20);
+            double seatNeutralG = cos(deg6);
 
             Vector3D blNormal = Transform(YPR(deg20, deg20, 0),
                                           new Vector3D(-1, 0, 0));
@@ -738,14 +741,14 @@ namespace driver
 
                 var sourceData = source();
                 FlightData data = sourceData.Item1;
-                float t = sourceData.Item2;
+                double t = sourceData.Item2;
 
-                float x = data.x;
-                float y = data.y;
-                float z = data.z;
-                float yaw = data.yaw;
-                float pitch = data.pitch;
-                float roll = data.roll;
+                double x = data.x;
+                double y = data.y;
+                double z = data.z;
+                double yaw = data.yaw;
+                double pitch = data.pitch;
+                double roll = data.roll;
 
                 // Rotating index into the various history arrays
                 int[] ago = new int[history];
@@ -763,39 +766,71 @@ namespace driver
                 vAirframe[now] = new Vector3D(data.xDot, data.yDot, data.zDot);
                 vSeats[now] = Scale(Subtract(seats[now], seats[ago[1]]), ts[now] - ts[ago[1]]);
 
+                Vector3D bln = Transform(xform, blNormal);
+                Vector3D brn = Transform(xform, brNormal);
+                Vector3D sln = Transform(xform, slNormal);
+                Vector3D srn = Transform(xform, srNormal);
+
+                // ft/sec/sec
+                double deltaT = ts[now] - ts[ago[1]];
+                Vector3D aAirframe = Scale(Subtract(vAirframe[now], vAirframe[ago[1]]), 1.0 / deltaT);
+                Vector3D aSeat = Scale(Subtract(vSeats[now], vSeats[ago[1]]), 1.0 / deltaT);
+                Vector3D acc = Add(aAirframe, aSeat);
+
+                // Turns out the position and velocity data coming
+                // from Falcon is pretty noisy. We smooth things out
+                // to help with this.
+                double smoothing = 0.75;
+                fs[now] = Add(Scale(fs[ago[1]], smoothing),
+                              Scale(Add(gravity, Scale(acc, -1.0)), 1.0 - smoothing));
+
+                Vector3D f = fs[now];
+
+                double bl = Dot(f, bln);
+                double br = Dot(f, brn);
+                double sl = Dot(f, sln);
+                double sr = Dot(f, srn);
+
+                double blG = bl / G;
+                double brG = br / G;
+                double slG = sl / G;
+                double srG = sr / G;
+
+                // TODO: Map the neutral (1G) position as .25
+                long commandBL = Position(blG, backNeutralG);
+                long commandBR = Position(brG, backNeutralG);
+                long commandSL = Position(slG, seatNeutralG);
+                long commandSR = Position(srG, seatNeutralG);
+
+                Stats stats;
+                stats.Forces.BL = bl;
+                stats.Forces.BR = br;
+                stats.Forces.SL = sl;
+                stats.Forces.SR = sr;
+                stats.G.BL = blG;
+                stats.G.BR = brG;
+                stats.G.SL = slG;
+                stats.G.SR = srG;
+                stats.Commands.BL = commandBL;
+                stats.Commands.BR = commandBR;
+                stats.Commands.SL = commandSL;
+                stats.Commands.SR = commandSR;
+                stats.Yaw = yaw;
+                stats.Pitch = pitch;
+                stats.Roll = roll;
+                stats.VAC = vAirframe[now];
+                stats.DVAC = aAirframe;
+                stats.DVSeat = aSeat;
+                stats.DVTot = f;
+                stats.DeltaT = ts[now] - ts[ago[1]];
 
                 // We skip the first few frames until we have enough
                 // history to do calculation
                 if (counter > history)
                 {
-                    Vector3D bln = Transform(xform, blNormal);
-                    Vector3D brn = Transform(xform, brNormal);
-                    Vector3D sln = Transform(xform, slNormal);
-                    Vector3D srn = Transform(xform, srNormal);
-
-                    // ft/sec/sec
-                    float deltaT = ts[now] - ts[ago[1]];
-                    Vector3D aAirframe = Scale(Subtract(vAirframe[now], vAirframe[ago[1]]), 1.0F / deltaT);
-                    Vector3D aSeat = Scale(Subtract(vSeats[now], vSeats[ago[1]]), 1.0F / deltaT);
-                    Vector3D acc = Add(aAirframe, aSeat);
-                    Vector3D f = Add(gravity, Scale(acc, -1.0F));
-
-                    float bl = Dot(f, bln);
-                    float br = Dot(f, brn);
-                    float sl = Dot(f, sln);
-                    float sr = Dot(f, srn);
-
-                    float blG = bl / G;
-                    float brG = br / G;
-                    float slG = sl / G;
-                    float srG = sr / G;
-
-                    // TODO: Map the neutral (1G) position as .25
-                    float commandBL = Position(blG, backNeutralG);
-                    float commandBR = Position(brG, backNeutralG);
-                    float commandSL = Position(slG, seatNeutralG);
-                    float commandSR = Position(srG, seatNeutralG);
-
+                    reportStats(stats);
+                    //ts[now] - ts[ago[1]], brG, blG, srG, slG);
+                    
                     if (recordWriter != null)
                     {
                         if (_recordFlushOp != null)
@@ -812,36 +847,80 @@ namespace driver
                         _recordFlushOp = recordWriter.FlushAsync();
                     }
 
-                    // TODO: Convert to serial output
-                    Console.WriteLine("M BL {0}", commandBL);
-                    Console.WriteLine("M BR {0}", commandBR);
-                    Console.WriteLine("M SL {0}", commandSL);
-                    Console.WriteLine("M SR {0}", commandSR);
+                    transmit(String.Format("M BL {0}", commandBL));
+                    transmit(String.Format("M BR {0}", commandBR));
+                    transmit(String.Format("M SL {0}", commandSL));
+                    transmit(String.Format("M SR {0}", commandSR));
                 }
                 Sleep(interval);
                 ++counter;
             }
         }
 
+        static Action<String> SerialPortTransmitter(String port)
+        {
+            // TODO: Maybe move transmission into its own thread so we
+            // can let the main loop keep running in case of writes
+            // blocking
+            SerialPort serialPort = new SerialPort(port, 9600);
+            serialPort.Open();
+            return (s) =>
+                {
+                    serialPort.WriteLine(s);
+                };
+        }
+
+        static Action<String> ConsoleTransmitter()
+        {
+            return (s) => { Console.WriteLine(s); };
+        }
+
+        static Action<Stats> StatsReporter(StatsDialog dlg)
+        {
+            return (Action<Stats>) ((stats) =>
+                {
+                    dlg.BeginInvoke((Action) (() => { dlg.Update(stats); }));
+                });
+        }
+
         static void Main(String[] args)
         {
-            if (args.Length > 0 && args[0] == "--record")
+            TextWriter recordWriter = null;
+            String port = null;
+            for (int i = 0; i < args.Length; ++i)
             {
-                TextWriter recordWriter;
-                if (args.Length > 1)
+                if (args[i] == "--record")
                 {
-                    recordWriter = new StreamWriter(args[1]);
+                    ++i;
+                    if ((i < args.Length) && !args[i].StartsWith("--"))
+                    {
+                        recordWriter = new StreamWriter(args[++i]);
+                    }
+                    else
+                    {
+                        recordWriter = Console.Out;
+                    }
                 }
-                else
+                else if (args[i] == "--port")
                 {
-                    recordWriter = Console.Out;
+                    port = args[++i];
                 }
-                Drive(BMSSource(), recordWriter);
             }
-            else
-            {
-                Drive(BMSSource(), null);
-            }
+
+            StatsDialog dlg = new StatsDialog();
+            Thread worker = new Thread(delegate()
+                                       {
+                                           Drive(BMSSource(),
+                                                 recordWriter,
+                                                 port == null ? ConsoleTransmitter() : SerialPortTransmitter(port),
+                                                 StatsReporter(dlg));
+                                       });
+            worker.Start();
+            
+            System.Windows.Forms.Application.Run(dlg);
+
+            // TODO: Put this in its own thread
+            
         }
     }
 }
