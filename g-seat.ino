@@ -10,7 +10,8 @@
 #define DEBUG TRUE
 
 RotaryEncoder* encoders[] = {
-  new RotaryEncoder(F, 7, F, 6)
+  new RotaryEncoder(F, 7, F, 6),
+  new RotaryEncoder(F, 5, F, 4)
 };
 
 const int encoderCount = sizeof(encoders)/sizeof(RotaryEncoder*);
@@ -27,7 +28,8 @@ long _diagnosticsUntil;
 
 DriveUnit* driveUnits[] = {
   //            Ch,   Dir,              En, RPWM, LPWM, pwm, encoder
-  new DriveUnit("BL", CounterClockwise,  5,    0,    1, &pwm, encoders[0])
+  new DriveUnit("BR", CounterClockwise,  5,    0,    1, &pwm, encoders[0]),
+  new DriveUnit("BL", CounterClockwise,  6,    2,    3, &pwm, encoders[1])
 };
 
 const int driveUnitCount = sizeof(driveUnits)/sizeof(DriveUnit*);
@@ -248,6 +250,16 @@ void dispatchCommand(char* command) {
   }
   else if (eq(directive, "Q")) {
     printDiagnostics();
+    Serial.println();
+    Serial.println();
+  }
+  else if (eq(directive, "ENCODER")) {
+    t = nextToken(t);
+    int index = atoi(t.val);
+    Serial.print("Encoder ");
+    Serial.print(index);
+    Serial.print("=");
+    Serial.println(encoders[index]->_pos);
   }
   else if (eq(directive, "MODE")) {
     t = nextToken(t);

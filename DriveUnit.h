@@ -23,10 +23,13 @@ class DriveUnit {
   long _drive;
   long _boost;
   long _pos;
+  long _lastPos;
+  long _lastT;
   double _v;
   double _targetV;
   Direction _direction;
   double _params[8];
+  
 
   /* // PID control */
   /* double _pos; */
@@ -115,6 +118,9 @@ class DriveUnit {
     /* _pid->SetOutputLimits(-10000.0, 10000.0); */
     /* //_pid->SetSampleTime(50); */
     /* _pid->SetMode(AUTOMATIC); */
+
+    _lastPos = readPos();
+    _lastT = millis();
   }
 
   char* getChannelName() {
@@ -204,17 +210,14 @@ class DriveUnit {
   void update() {
     //updateLinearWithGap();
 
-    static long lastPos = readPos();
-    static long lastT = millis();
-
     long pos = readPos();
     long posError = _target - pos;
 
     long pDrive = posError * _params[KP];
 
     long t = millis();
-    long deltaT = t - lastT;
-    long deltaX = pos - lastPos;
+    long deltaT = t - _lastT;
+    long deltaX = pos - _lastPos;
     _v = 0.0;
     if (deltaT != 0) {
       _v = deltaX / deltaT;
@@ -250,56 +253,19 @@ class DriveUnit {
 
     setDrive(constrain(drive, -10000, 10000));
 
-    lastPos = pos;
-    lastT = t;
+    _lastPos = pos;
+    _lastT = t;
 
-  }
-
-  void updateBroken() {
-    static long lastT = millis();
-    static long lastPos = readPos();
-    long decisionTime = 100; // msec
-    double kv = 0.001; // Controls how quickly velocity should change
-                    // based on position from target. [units/ms]
-    double kd = 12.0;  // How much should we change the drive per unit of
-                    // velocity we're off by?
-
-    long t = millis();
-    _pos = readPos();
-    long deltaT = t - lastT;
-    if (deltaT > decisionTime) {
-      _v = (_pos - lastPos) / (double) deltaT;
-      long posErr = _target - _pos;
-      if (abs(posErr) < 150) {
-        _targetV = 0;
-      }
-      else {
-        _targetV = posErr * kv;
-      }
-
-      double deltaV = _targetV - _v;
-
-      long drive = constrain((long) (_drive + (deltaV * abs(deltaV) * kd)),
-                             -10000, 10000);
-
-      setDrive(drive);
-
-      lastT = t;
-      lastPos = _pos;
-    }
   }
 
   void printDiagnostics() {
     char buf[128];
-    /* char ts[32]; */
-    /* dtos(ts, micros() / 1000000.0); */
     char vs[32];
     dtos(vs, _v);
     char tvs[32];
     dtos(tvs, _targetV);
     sprintf(buf, "ch=%s,t=%ld,pos=%ld,target=%ld,drive=%ld,boost=%ld,v=%s,target-v=%s",
             _channelName,
-            //ts,
             micros(),
             readPos(),
             _target,

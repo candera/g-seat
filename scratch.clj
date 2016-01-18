@@ -123,9 +123,9 @@
                              pos
                              pos))))))
 
-(replay "/dev/cu.usbmodem1451" "oscillation.csv")
-(replay "/dev/cu.usbmodem1451" "square.csv")
-(replay "/dev/cu.usbmodem1451" "flight-data-1.csv")
+(replay "/dev/cu.usbmodem1411" "../oscillation.csv")
+(replay "/dev/cu.usbmodem1411" "square.csv")
+(replay "/dev/cu.usbmodem1411" "../flight-data-1.csv")
 
 
 (defn run-test [device drive]

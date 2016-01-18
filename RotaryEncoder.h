@@ -12,8 +12,9 @@ class RotaryEncoder {
   volatile unsigned char* _ddr2;
   volatile unsigned char* _port1;
   volatile unsigned char* _port2;
-  unsigned char _bit1;
-  unsigned char _bit2;
+  uint8_t _bit1;
+  uint8_t _bit2;
+  uint8_t _old_AB = 0;
 
  private:
   volatile unsigned char* getPortAddr(Port port) {
@@ -66,8 +67,8 @@ class RotaryEncoder {
   }
 
  public:
-  RotaryEncoder(Port port1, unsigned char bit1,
-                Port port2, unsigned char bit2) {
+  RotaryEncoder(Port port1, uint8_t bit1,
+                Port port2, uint8_t bit2) {
 
     _port1 = getPortAddr(port1);
     _pin1 = getPinAddr(port1);
@@ -89,21 +90,20 @@ class RotaryEncoder {
     *_ddr1 &= ~(1<<_bit1);
     *_port1 |= (1<<_bit1);
 
-    *_ddr1 &= ~(1<<_bit2);
-    *_port1 |= (1<<_bit2);
+    *_ddr2 &= ~(1<<_bit2);
+    *_port2 |= (1<<_bit2);
   }
 
   void update() {
     // I stole this extremely clever code from here:
     // https://www.circuitsathome.com/mcu/reading-rotary-encoder-on-arduino
     static int8_t enc_states[] = {0,-1,1,0,1,0,0,-1,-1,0,0,1,0,1,-1,0};
-    static uint8_t old_AB = 0;
-
+    
     int8_t new_AB = (bitRead(*_pin1, _bit1) << 1) | bitRead(*_pin2, _bit2);
 
-    old_AB <<= 2;      //remember previous state
-    old_AB |= new_AB;  //add current state
+    _old_AB <<= 2;      //remember previous state
+    _old_AB |= new_AB;  //add current state
 
-    _pos += enc_states[( old_AB & 0x0f )];
+    _pos += enc_states[( _old_AB & 0x0f )];
   }
 };

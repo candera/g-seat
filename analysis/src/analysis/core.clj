@@ -9,8 +9,8 @@
             DefaultXYItemRenderer
             XYSplineRenderer]))
 
-;; (def debug println)
-(def debug (constantly nil))
+(def debug println)
+;;(def debug (constantly nil))
 
 (def converters
   (let [d #(Double. %)
@@ -22,34 +22,35 @@
      :target-v d
      :drive    d}))
 
+(defn dump-command [device cmd n]
+  (with-open [dev-out (clojure.java.io/writer device)
+              dev-in (clojure.java.io/reader device)]
+    (.write dev-out cmd)
+    (.write dev-out "\n")
+    (.flush dev-out)
+    (into [] (take n (line-seq dev-in)))))
+
+(defn parse-line [line]
+  (->> (clojure.string/split line #",")
+       (map clojure.string/trim)
+       (map #(clojure.string/split % #"="))
+       (map (fn [[k v]]
+              (let [k*        (keyword k)
+                    converter (get converters k* identity)]
+                [k* (converter v)])))
+       (into (sorted-map))))
+
 (defn run-data-command [device cmd]
   (with-open [dev-out (clojure.java.io/writer device)
               dev-in (clojure.java.io/reader device)]
     (.write dev-out cmd)
+    (.write dev-out "\n")
     (.flush dev-out)
-    (let [[header & lines] (line-seq dev-in)]
-      (->> (loop [data []
-                  [line & more] lines]
-             (debug "'" line "'")
-             (if (clojure.string/blank? line)
-               data
-               (let [sample (->> (clojure.string/split line #",")
-                                 (map clojure.string/trim)
-                                 (map #(clojure.string/split % #"="))
-                                 (map (fn [[k v]]
-                                        (let [k*        (keyword k)
-                                              converter (get converters k* identity)]
-                                          [k* (converter v)])))
-                                 (into (sorted-map)))]
-                 (recur (conj data sample
-                              #_{:ch ch
-                               :t (- (Double. t) start)
-                               :pos (Long. pos)
-                               :target (Long. target)
-                               :v (Double. v)
-                               :target-v (Double. target-v)
-                               :drive (Long. d)})
-                        more))))))))
+    (->> dev-in
+         line-seq
+         (take-while (complement clojure.string/blank?))
+         (map parse-line)
+         (into []))))
 
 (defn run-test [device drive]
   (let [data (run-data-command device (format "TEST BL %d\n" drive))]
@@ -102,7 +103,9 @@
       (.setRenderer plot 1 splinerenderer))
     (.setRangeAxis plot 0 (NumberAxis. y1-label))
     (.setRangeAxis plot 1 (NumberAxis. y2-label))
-    (.setDomainAxis plot (NumberAxis. x-label))
+    (.setDomainAxis plot (doto (NumberAxis. x-label)
+                           (.setAutoRangeIncludesZero false)))
+    (-> plot .getDomainAxis (.setAutoRange true))
 
     (.mapDatasetToRangeAxis plot 0 0)
     (.mapDatasetToRangeAxis plot 1 1)

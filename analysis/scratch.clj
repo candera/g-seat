@@ -52,9 +52,27 @@
   (two-axis-chart :t "t" :pos "pos" :drive "drive" data)
   (two-axis-chart :t "t" :pos "pos" :v "v" data))
 
-(let [data (run-data-command "/dev/cu.usbmodem1451" "M BL 7000\n")]
+(let [data (->> (run-data-command "/dev/cu.usbmodem1411" "M BL 2000")
+                (filter #(= "BL" (:ch %))))]
   (two-axis-chart :t "t" :drive "drive" :v "v" data)
   (two-axis-chart :t "t" :target-v "target-v" :v "v" data)
   (two-axis-chart :t "t" :pos "pos" :drive "drive" data)
   (two-axis-chart :t "t" :pos "pos" :v "v" data))
+
+
+(run-data-command "/dev/cu.usbmodem1411" "Q")
+
+(->> (analysis.core/dump-command "/dev/cu.usbmodem1411" "Q" 2)
+     (map analysis.core/parse-line))
+
+(dotimes [i 60]
+  (->> (analysis.core/dump-command "/dev/cu.usbmodem1411" "Q" 4)
+       (map analysis.core/parse-line)
+       (map (fn [{:keys [pos]}] pos))
+       println)
+  (Thread/sleep 1000))
+
+(move "/dev/cu.usbmodem1411" 3000)
+
+
 
