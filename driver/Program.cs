@@ -528,6 +528,11 @@ namespace driver
             Y = y;
             Z = z;
         }
+
+        public bool Equals(Vector3D that)
+        {
+            return this.X == that.X && this.Y == that.Y && this.Z == that.Z;
+        }
     }
 
     struct Matrix3D
@@ -701,10 +706,11 @@ namespace driver
         static void Drive(Func<Tuple<FlightData, double>> source, TextWriter recordWriter, Action<String> transmit, Action<Stats> reportStats)
         {
             // How long to sleep between polling, in ms
-            int interval = 50;
+            int interval = 10;
 
             int history = 3;
             double[] ts = new double[history];
+            Vector3D[] pos = new Vector3D[history];
             // Yaw, pitch, roll
             Vector3D[] seats = new Vector3D[history];
             Vector3D[] vAirframe = new Vector3D[history];
@@ -759,101 +765,111 @@ namespace driver
                 int now = ago[0];
 
                 ts[now] = t;
-                Vector3D airframe = new Vector3D(x, y, z);
-                Matrix3D xform = YPR(yaw, pitch, roll);
-                seats[now] = Transform(xform, seatPos);
+                pos[now] = new Vector3D(x, y, z);
 
-                vAirframe[now] = new Vector3D(data.xDot, data.yDot, data.zDot);
-                vSeats[now] = Scale(Subtract(seats[now], seats[ago[1]]), ts[now] - ts[ago[1]]);
-
-                Vector3D bln = Transform(xform, blNormal);
-                Vector3D brn = Transform(xform, brNormal);
-                Vector3D sln = Transform(xform, slNormal);
-                Vector3D srn = Transform(xform, srNormal);
-
-                // ft/sec/sec
-                double deltaT = ts[now] - ts[ago[1]];
-                Vector3D aAirframe = Scale(Subtract(vAirframe[now], vAirframe[ago[1]]), 1.0 / deltaT);
-                Vector3D aSeat = Scale(Subtract(vSeats[now], vSeats[ago[1]]), 1.0 / deltaT);
-                Vector3D acc = Add(aAirframe, aSeat);
-
-                // Turns out the position and velocity data coming
-                // from Falcon is pretty noisy. We smooth things out
-                // to help with this.
-                double smoothing = 0.75;
-                fs[now] = Add(Scale(fs[ago[1]], smoothing),
-                              Scale(Add(gravity, Scale(acc, -1.0)), 1.0 - smoothing));
-
-                Vector3D f = fs[now];
-
-                double bl = Dot(f, bln);
-                double br = Dot(f, brn);
-                double sl = Dot(f, sln);
-                double sr = Dot(f, srn);
-
-                double blG = bl / G;
-                double brG = br / G;
-                double slG = sl / G;
-                double srG = sr / G;
-
-                // TODO: Map the neutral (1G) position as .25
-                long commandBL = Position(blG, backNeutralG);
-                long commandBR = Position(brG, backNeutralG);
-                long commandSL = Position(slG, seatNeutralG);
-                long commandSR = Position(srG, seatNeutralG);
-
-                Stats stats;
-                stats.Forces.BL = bl;
-                stats.Forces.BR = br;
-                stats.Forces.SL = sl;
-                stats.Forces.SR = sr;
-                stats.G.BL = blG;
-                stats.G.BR = brG;
-                stats.G.SL = slG;
-                stats.G.SR = srG;
-                stats.Commands.BL = commandBL;
-                stats.Commands.BR = commandBR;
-                stats.Commands.SL = commandSL;
-                stats.Commands.SR = commandSR;
-                stats.Yaw = yaw;
-                stats.Pitch = pitch;
-                stats.Roll = roll;
-                stats.VAC = vAirframe[now];
-                stats.DVAC = aAirframe;
-                stats.DVSeat = aSeat;
-                stats.DVTot = f;
-                stats.DeltaT = ts[now] - ts[ago[1]];
-
-                // We skip the first few frames until we have enough
-                // history to do calculation
-                if (counter > history)
+                // If position hasn't changed, we've probably read the
+                // same sampled data twice - skip updating, since it's
+                // going to look like we've instantly gone to zero
+                // speed.
+                if (!pos[now].Equals(pos[ago[1]]))
                 {
-                    reportStats(stats);
-                    //ts[now] - ts[ago[1]], brG, blG, srG, slG);
-                    
-                    if (recordWriter != null)
+                
+                    Matrix3D xform = YPR(yaw, pitch, roll);
+                    seats[now] = Transform(xform, seatPos);
+
+                    vAirframe[now] = new Vector3D(data.xDot, data.yDot, data.zDot);
+                    //vAirframe[now] = Subtract(pos[now], pos[ago[1]]);
+                    vSeats[now] = Scale(Subtract(seats[now], seats[ago[1]]), ts[now] - ts[ago[1]]);
+
+                    Vector3D bln = Transform(xform, blNormal);
+                    Vector3D brn = Transform(xform, brNormal);
+                    Vector3D sln = Transform(xform, slNormal);
+                    Vector3D srn = Transform(xform, srNormal);
+
+                    // ft/sec/sec
+                    double deltaT = ts[now] - ts[ago[1]];
+                    Vector3D aAirframe = Scale(Subtract(vAirframe[now], vAirframe[ago[1]]), 1.0 / deltaT);
+                    Vector3D aSeat = Scale(Subtract(vSeats[now], vSeats[ago[1]]), 1.0 / deltaT);
+                    Vector3D acc = Add(aAirframe, aSeat);
+
+                    // Turns out the position and velocity data coming
+                    // from Falcon is pretty noisy. We smooth things out
+                    // to help with this.
+                    double smoothing = 0.9;
+                    fs[now] = Add(Scale(fs[ago[1]], smoothing),
+                                  Scale(Add(gravity, Scale(acc, -1.0)), 1.0 - smoothing));
+
+                    Vector3D f = fs[now];
+
+                    double bl = Dot(f, bln);
+                    double br = Dot(f, brn);
+                    double sl = Dot(f, sln);
+                    double sr = Dot(f, srn);
+
+                    double blG = bl / G;
+                    double brG = br / G;
+                    double slG = sl / G;
+                    double srG = sr / G;
+
+                    // TODO: Map the neutral (1G) position as .25
+                    long commandBL = Position(blG, backNeutralG);
+                    long commandBR = Position(brG, backNeutralG);
+                    long commandSL = Position(slG, seatNeutralG);
+                    long commandSR = Position(srG, seatNeutralG);
+
+                    Stats stats;
+                    stats.Forces.BL = bl;
+                    stats.Forces.BR = br;
+                    stats.Forces.SL = sl;
+                    stats.Forces.SR = sr;
+                    stats.G.BL = blG;
+                    stats.G.BR = brG;
+                    stats.G.SL = slG;
+                    stats.G.SR = srG;
+                    stats.Commands.BL = commandBL;
+                    stats.Commands.BR = commandBR;
+                    stats.Commands.SL = commandSL;
+                    stats.Commands.SR = commandSR;
+                    stats.Yaw = yaw;
+                    stats.Pitch = pitch;
+                    stats.Roll = roll;
+                    stats.VAC = vAirframe[now];
+                    stats.DVAC = aAirframe;
+                    stats.DVSeat = aSeat;
+                    stats.DVTot = f;
+                    stats.DeltaT = ts[now] - ts[ago[1]];
+
+                    // We skip the first few frames until we have enough
+                    // history to do calculation
+                    if (counter > history)
                     {
-                        if (_recordFlushOp != null)
+                        reportStats(stats);
+                        //ts[now] - ts[ago[1]], brG, blG, srG, slG);
+                    
+                        if (recordWriter != null)
                         {
-                            _recordFlushOp.Wait();
+                            if (_recordFlushOp != null)
+                            {
+                                _recordFlushOp.Wait();
+                            }
+                            recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}",
+                                                   t,
+                                                   data.xDot, data.yDot, data.zDot,
+                                                   yaw, pitch, roll,
+                                                   commandBL, commandBR,
+                                                   commandSL, commandSR);
+
+                            _recordFlushOp = recordWriter.FlushAsync();
                         }
-                        recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}",
-                                               t,
-                                               data.xDot, data.yDot, data.zDot,
-                                               yaw, pitch, roll,
-                                               commandBL, commandBR,
-                                               commandSL, commandSR);
 
-                        _recordFlushOp = recordWriter.FlushAsync();
+                        transmit(String.Format("M BL {0}", commandBL));
+                        transmit(String.Format("M BR {0}", commandBR));
+                        transmit(String.Format("M SL {0}", commandSL));
+                        transmit(String.Format("M SR {0}", commandSR));
                     }
-
-                    transmit(String.Format("M BL {0}", commandBL));
-                    transmit(String.Format("M BR {0}", commandBR));
-                    transmit(String.Format("M SL {0}", commandSL));
-                    transmit(String.Format("M SR {0}", commandSR));
+                    ++counter;
                 }
                 Sleep(interval);
-                ++counter;
             }
         }
 

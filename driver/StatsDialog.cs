@@ -27,7 +27,7 @@ namespace driver
             new VisComponent { Name = "BR", Min = -3, Max = 9 },
             new VisComponent { Name = "SL", Min = -3, Max = 9 },
             new VisComponent { Name = "SR", Min = -3, Max = 9 },
-            new VisComponent { Name = "DT", Min = 0.09, Max = 0.11 },
+            new VisComponent { Name = "DT", Min = 0.24, Max = 0.26 },
             new VisComponent { Name = "Yaw", Min = -3.2, Max = 3.2 },
             new VisComponent { Name = "Pitch", Min = -3.2, Max = 3.2 },
             new VisComponent { Name = "Roll", Min = -3.2, Max = 3.2 },
