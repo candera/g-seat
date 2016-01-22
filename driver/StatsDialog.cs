@@ -11,17 +11,6 @@ namespace driver
     /// </summary>
     public class StatsDialog : System.Windows.Forms.Form
     {
-        public class VisComponent
-        {
-            public String Name;
-            public Label Label;
-            public TrackBar TrackBar;
-            public double Min;
-            public double Max;
-        }
-
-        private int ticks = 1000;
-
         private VisComponent[] visComponents = new[] {
             new VisComponent { Name = "BL", Min = -3, Max = 9 },
             new VisComponent { Name = "BR", Min = -3, Max = 9 },
@@ -93,44 +82,24 @@ namespace driver
             ((System.ComponentModel.ISupportInitialize)(this.timeErrorProvider)).BeginInit();
             this.SuspendLayout();
 
-            for (int index = 0; index < visComponents.Length; ++index)
-            {
-                VisComponent c = visComponents[index];
-                int spacing = 60;
-                int y = index * spacing + 10;
-
-                c.Label = new Label();
-                c.Label.Text = c.Name;
-                c.Label.Location = new System.Drawing.Point(10, y);
-                c.Label.Size = new System.Drawing.Size(150, 28);
-
-                c.TrackBar = new TrackBar();
-                c.TrackBar.Location = new System.Drawing.Point(165, y);
-                c.TrackBar.Size = new System.Drawing.Size(300, 28);
-                c.TrackBar.Minimum = 0;
-                c.TrackBar.Maximum = ticks;
-                c.TrackBar.TickFrequency = ticks/10;
-            }
-
+            int spacing = 60;
+            Functions.PopulateVisComponents(this, visComponents, spacing);
+            
             //
             // StatsDialog
             //
             this.AutoScaleBaseSize = new System.Drawing.Size(15, 34);
-            this.ClientSize = new System.Drawing.Size(500, 500);
+            this.ClientSize = new System.Drawing.Size(800, 800);
 
             this.Font = new System.Drawing.Font("Microsoft Sans Serif", 18F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.MaximizeBox = false;
-            this.MaximumSize = new System.Drawing.Size(1250, 500);
+            this.MaximumSize = new System.Drawing.Size(1250, 800);
             this.MinimizeBox = false;
-            this.MinimumSize = new System.Drawing.Size(0, visComponents.Length * 60 + 20);
+            this.MinimumSize = new System.Drawing.Size(0, visComponents.Length * spacing + 20);
             this.Name = "StatsDialog";
             this.Text = "StatsDialog";
             ((System.ComponentModel.ISupportInitialize)(this.timeErrorProvider)).EndInit();
 
-            foreach (var c in visComponents) {
-                this.Controls.Add(c.Label);
-                this.Controls.Add(c.TrackBar);
-            }
 
             this.ResumeLayout(false);
             this.PerformLayout();
@@ -150,23 +119,12 @@ namespace driver
             }
             return null;
         }
-
+     
         private void UpdateSingle(String name, double val)
         {
             VisComponent c = LookupVisComponent(name);
-            int v = (int) (ticks * ((val - c.Min) / (c.Max - c.Min)));
 
-            if (v < 0)
-            {
-                v = 0;
-            }
-
-            if (v > ticks)
-            {
-                v = ticks;
-            }
-
-            c.TrackBar.Value = v;
+            c.TrackBar.Value = Functions.ComputeTicks(c, val);
         }
 
         private void UpdateSingle(String name, long val)

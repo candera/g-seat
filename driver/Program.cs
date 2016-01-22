@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,20 +26,20 @@ namespace driver
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr OpenFileMapping(
-            FileMapAccess dwDesiredAccess,
-            bool bInheritHandle,
-            string lpName);
+                                                    FileMapAccess dwDesiredAccess,
+                                                    bool bInheritHandle,
+                                                    string lpName);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool CloseHandle(IntPtr hHandle);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr MapViewOfFile(
-            IntPtr hFileMappingObject,
-            FileMapAccess dwDesiredAccess,
-            uint dwFileOffsetHigh,
-            uint dwFileOffsetLow,
-            uint dwNumberOfBytesToMap);
+                                                  IntPtr hFileMappingObject,
+                                                  FileMapAccess dwDesiredAccess,
+                                                  uint dwFileOffsetHigh,
+                                                  uint dwFileOffsetLow,
+                                                  uint dwNumberOfBytesToMap);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool UnmapViewOfFile(IntPtr lpBaseAddress);
@@ -515,7 +517,7 @@ namespace driver
     }
 
     /* I made my own because I wrote this on a Mac and Mono
-        doesn't have the Microsoft libs. */
+       doesn't have the Microsoft libs. */
     public struct Vector3D
     {
         public double X { get; }
@@ -873,36 +875,49 @@ namespace driver
             }
         }
 
-        static Action<String> SerialPortTransmitter(String port)
-        {
-            // TODO: Maybe move transmission into its own thread so we
-            // can let the main loop keep running in case of writes
-            // blocking
-            SerialPort serialPort = new SerialPort(port, 9600);
-            serialPort.Open();
-            return (s) =>
-                {
-                    serialPort.WriteLine(s);
-                };
-        }
-
-        static Action<String> ConsoleTransmitter()
-        {
-            return (s) => { Console.WriteLine(s); };
-        }
-
         static Action<Stats> StatsReporter(StatsDialog dlg)
         {
             return (Action<Stats>) ((stats) =>
-                {
-                    dlg.BeginInvoke((Action) (() => { dlg.Update(stats); }));
-                });
+                                    {
+                                        dlg.BeginInvoke((Action) (() => { dlg.Update(stats); }));
+                                    });
         }
 
+        static Action<Dictionary<string, double>> MakeConfigurator(Action<string> transmit)
+        {
+            return (Action<Dictionary<string, double>>) ((config) =>
+                    {
+                        StringBuilder sb = new StringBuilder();
+                        foreach (var entry in config) {
+                            foreach (var channel in new [] { "BL", "BR" })
+                            {
+                                sb.Append(String.Format("CONFIG {0} {1} {2}\n", channel, entry.Key, entry.Value));
+                            }
+                        }
+                        transmit(sb.ToString());
+                    });
+                                                        
+        }
+
+        static void SerialTest(string port)
+        {
+            SerialPort serialPort = new SerialPort(port, 9600);
+            serialPort.Open();
+            serialPort.NewLine = "\n";
+            serialPort.RtsEnable = true;
+            serialPort.WriteLine("PING");
+            Console.WriteLine("Awaiting response");
+            Console.WriteLine(serialPort.ReadLine());
+            Console.WriteLine("Serial test complete");
+            serialPort.Close();
+        }
+        
         static void Main(String[] args)
         {
             TextWriter recordWriter = null;
             String port = null;
+            String telemetryPath = null;
+            bool serialTest = false;
             for (int i = 0; i < args.Length; ++i)
             {
                 if (args[i] == "--record")
@@ -921,19 +936,100 @@ namespace driver
                 {
                     port = args[++i];
                 }
+                else if (args[i] == "--telemetry")
+                {
+                    telemetryPath = args[++i];
+                }
+                else if (args[i] == "--serialtest")
+                {
+                    serialTest = true;
+                }
+                else
+                {
+                    Console.WriteLine("Unrecognized command line option: ", args[i]);
+                    return;
+                }
             }
 
-            StatsDialog dlg = new StatsDialog();
+            if (serialTest)
+            {
+                SerialTest(port);
+                return;
+            }
+
+            Action<string> write;
+            Func<string> read;
+            if (port == null)
+            {
+                write = (s) => Console.WriteLine(s);
+                read = () => {
+                    Thread.Sleep(TimeSpan.MaxValue);
+                    return "";
+                };
+            }
+            else
+            {
+                SerialPort serialPort = new SerialPort(port, 9600);
+                serialPort.RtsEnable = true;
+                serialPort.Open();
+                write = (s) => serialPort.WriteLine(s);
+                read = () => serialPort.ReadLine();
+            }
+
+            Action<string> reportTelemetry;
+            if (telemetryPath == null)
+            {
+                reportTelemetry = (s) => Console.WriteLine(s);
+            }
+            else
+            {
+                StreamWriter file = new StreamWriter(telemetryPath);
+                reportTelemetry = (s) => file.WriteLine(s);
+            }
+            
+            StatsDialog stats = new StatsDialog();
+            ConfigDialog config = new ConfigDialog(MakeConfigurator(write));
+
+            var writeQueue = new BlockingCollection<string>();
+            var readQueue = new BlockingCollection<string>();
+            Thread writeWorker = new Thread(delegate()
+                                            {
+                                                while (true)
+                                                {
+                                                    write(writeQueue.Take());
+                                                }
+                                            });
+            Thread readWorker = new Thread(delegate()
+                                           {
+                                               while(true)
+                                               {
+                                                   readQueue.Add(read());
+                                               }
+                                           });
             Thread worker = new Thread(delegate()
                                        {
                                            Drive(BMSSource(),
                                                  recordWriter,
-                                                 port == null ? ConsoleTransmitter() : SerialPortTransmitter(port),
-                                                 StatsReporter(dlg));
+                                                 (s) => writeQueue.Add(s),
+                                                 StatsReporter(stats));
                                        });
+
+            Thread telemetryWorker =
+                new Thread(delegate()
+                           {
+                               while (true)
+                               {
+                                   reportTelemetry(readQueue.Take());
+                               }
+                           });
+
+            telemetryWorker.Start();
+            writeWorker.Start();
+            readWorker.Start();
             worker.Start();
             
-            System.Windows.Forms.Application.Run(dlg);
+            config.Show();
+            System.Windows.Forms.Application.Run(stats);
 
             // TODO: Put this in its own thread
             

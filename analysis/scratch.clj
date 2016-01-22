@@ -75,4 +75,16 @@
 (move "/dev/cu.usbmodem1411" 3000)
 
 
-
+(let [mapify (fn [item]
+               (->> item
+                    (map #(clojure.string/split % #"="))
+                    (filter #(= (count %) 2))
+                    (into {})))]
+  (->> "/tmp/tel.txt"
+       clojure.java.io/file
+       clojure.java.io/reader
+       line-seq
+       (map #(clojure.string/split % #","))
+       (map mapify)
+       (remove empty?)
+       ))
