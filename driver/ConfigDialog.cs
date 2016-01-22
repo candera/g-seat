@@ -15,11 +15,12 @@ namespace driver
         private VisComponent[] visComponents = new[] {
             new VisComponent { Name = "KP", Min = 0, Max = 10, Value = 8.0 },
             new VisComponent { Name = "GAP", Min = 0, Max = 2500, Value = 500 },
-            new VisComponent { Name = "RES", Min = -3, Max = 9, Value = 0 },
+            new VisComponent { Name = "RES", Min = 0, Max = 2000, Value = 0 },
             new VisComponent { Name = "KVTARGET", Min = 0, Max = 10, Value = 0.5 },
             new VisComponent { Name = "KVBOOST", Min = 0, Max = 10, Value = 0 },
             new VisComponent { Name = "GOALSMOOTHING", Min = 0, Max = 1, Value = 0.1 },
             new VisComponent { Name = "DRIVESMOOTHING", Min = 0, Max = 1, Value = 0.1 },
+            new VisComponent { Name = "METRICS", Min = 0, Max = 1, Value = 0 },
         };
 
         private Button apply;

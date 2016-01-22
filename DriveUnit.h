@@ -10,6 +10,7 @@
 #define KVBOOST 4 // How much to boost drive per velocity error
 #define GOALSMOOTHING 5 // Amount of smoothing to apply to goal [0-1]
 #define DRIVESMOOTHING 6  // Amount of smoothing to apply to drive [0-1]
+#define METRICS 7 // > 0.5 means diagnostics are output
 
 class DriveUnit {
  private:
@@ -63,6 +64,7 @@ class DriveUnit {
     _params[KVBOOST] = 0;
     _params[GOALSMOOTHING] = 0.1;
     _params[DRIVESMOOTHING] = 0.1;
+    _params[METRICS] = 0;
   }
 
   boolean setParam(char* slot, double val) {
@@ -86,6 +88,9 @@ class DriveUnit {
     }
     else if (eq(slot, "DRIVESMOOTHING")) {
       _params[DRIVESMOOTHING] = val;
+    }
+    else if (eq(slot, "METRICS")) {
+      _params[METRICS] = val;
     }
     else {
       return false;
@@ -254,22 +259,24 @@ class DriveUnit {
   }
 
   void printDiagnostics() {
-    char buf[128];
-    char vs[32];
-    dtos(vs, _v);
-    char tvs[32];
-    dtos(tvs, _targetV);
-    sprintf(buf, "ch=%s,t=%ld,pos=%ld,target=%ld,drive=%ld,boost=%ld,v=%s,target-v=%s,goal=%ld",
-            _channelName,
-            micros(),
-            readPos(),
-            _target,
-            _drive,
-            _boost,
-            vs,
-            tvs,
-            _goal);
-    Serial.println(buf);
+    if (_params[METRICS] > 0.5) {
+      char buf[128];
+      char vs[32];
+      dtos(vs, _v);
+      char tvs[32];
+      dtos(tvs, _targetV);
+      sprintf(buf, "ch=%s,t=%ld,pos=%ld,target=%ld,drive=%ld,boost=%ld,v=%s,target-v=%s,goal=%ld",
+              _channelName,
+              micros(),
+              readPos(),
+              _target,
+              _drive,
+              _boost,
+              vs,
+              tvs,
+              _goal);
+      Serial.println(buf);
+    }
   }
 
 };
