@@ -8,6 +8,8 @@
 #define RES 2 // Spatial resolution
 #define KVTARGET 3  // Multiplier for target velocity as function of positional error
 #define KVBOOST 4 // How much to boost drive per velocity error
+#define GOALSMOOTHING 5 // Amount of smoothing to apply to goal [0-1]
+#define DRIVESMOOTHING 6  // Amount of smoothing to apply to drive [0-1]
 
 class DriveUnit {
  private:
@@ -20,6 +22,7 @@ class DriveUnit {
   Adafruit_PWMServoDriver* _pwm;
   RotaryEncoder* _encoder;
   long _target;
+  long _goal;
   long _drive;
   long _boost;
   long _pos;
@@ -53,11 +56,13 @@ class DriveUnit {
     _channelName = channelName;
     _direction = direction;
     _boost = 0;
-    _params[KP] = 1.5;
-    _params[GAP] = 1500;
-    _params[RES] = 50;
-    _params[KVTARGET] = 1.0;
-    _params[KVBOOST] = 1.0;
+    _params[KP] = 8.0;
+    _params[GAP] = 500;
+    _params[RES] = 0;
+    _params[KVTARGET] = 0.5;
+    _params[KVBOOST] = 0;
+    _params[GOALSMOOTHING] = 0.1;
+    _params[DRIVESMOOTHING] = 0.1;
   }
 
   boolean setParam(char* slot, double val) {
@@ -75,6 +80,12 @@ class DriveUnit {
     }
     else if (eq(slot, "KVBOOST")) {
       _params[KVBOOST] = val;
+    }
+    else if (eq(slot, "GOALSMOOTHING")) {
+      _params[GOALSMOOTHING] = val;
+    }
+    else if (eq(slot, "DRIVESMOOTHING")) {
+      _params[DRIVESMOOTHING] = val;
     }
     else {
       return false;
@@ -110,8 +121,9 @@ class DriveUnit {
 
     // TODO: Dynamic calibration
     calibrate();
-    _posHigh = _posLow + 700;
+    _posHigh = _posLow + 600;
 
+    _goal = 2500;
     seek(2500);
     /* _pid = new PID(&_pos, &_pidOutput, &_pidSetpoint, */
     /*                1.0, 0.0, 0.0, DIRECT); */
@@ -186,37 +198,17 @@ class DriveUnit {
     return map(raw, _posLow, _posHigh, 0, 10000);
   }
 
-  void updateLinearWithGap() {
-    long pos = readPos();
-    long posError = _target - pos;
-
-    long drive = posError * _params[KP];
-    // Ignore the center of the drive region - it doesn't move at all
-    long gap = (long) _params[GAP];
-    if ((abs(posError) < (long) _params[RES]) || (abs(drive) < 2)) {
-      drive = 0;
-    }
-    else if (drive > 0) {
-      drive = (drive * (10000 - gap) / 10000) + gap;
-    }
-    else if (drive < 0) {
-      drive = (drive * (10000 - gap) / 10000) - gap;
-    }
-
-    setDrive(constrain(drive, -10000, 10000));
-
-  }
-
   void update() {
-    //updateLinearWithGap();
+    long t = millis();
+    long deltaT = t - _lastT;
+
+    _goal = ((1.0 - _params[GOALSMOOTHING]) * _target) + _params[GOALSMOOTHING] * _goal;
 
     long pos = readPos();
-    long posError = _target - pos;
+    long posError = _goal - pos;
 
     long pDrive = posError * _params[KP];
 
-    long t = millis();
-    long deltaT = t - _lastT;
     long deltaX = pos - _lastPos;
     _v = 0.0;
     if (deltaT != 0) {
@@ -251,7 +243,10 @@ class DriveUnit {
       drive = (drive * (10000 - gap) / 10000) - gap;
     }
 
-    setDrive(constrain(drive, -10000, 10000));
+    drive = constrain(((1.0 - _params[DRIVESMOOTHING]) * drive) + _params[DRIVESMOOTHING] * _drive, 
+                      -10000,
+                      10000);
+    setDrive(drive);
 
     _lastPos = pos;
     _lastT = t;
@@ -264,7 +259,7 @@ class DriveUnit {
     dtos(vs, _v);
     char tvs[32];
     dtos(tvs, _targetV);
-    sprintf(buf, "ch=%s,t=%ld,pos=%ld,target=%ld,drive=%ld,boost=%ld,v=%s,target-v=%s",
+    sprintf(buf, "ch=%s,t=%ld,pos=%ld,target=%ld,drive=%ld,boost=%ld,v=%s,target-v=%s,goal=%ld",
             _channelName,
             micros(),
             readPos(),
@@ -272,7 +267,8 @@ class DriveUnit {
             _drive,
             _boost,
             vs,
-            tvs);
+            tvs,
+            _goal);
     Serial.println(buf);
   }
 
