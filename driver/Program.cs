@@ -918,6 +918,9 @@ namespace driver
             String port = null;
             String telemetryPath = null;
             bool serialTest = false;
+            bool chopTest = false;
+            int chopInterval = 10; // msec
+            int chopStep = 100; // Units
             for (int i = 0; i < args.Length; ++i)
             {
                 if (args[i] == "--record")
@@ -943,6 +946,12 @@ namespace driver
                 else if (args[i] == "--serialtest")
                 {
                     serialTest = true;
+                }
+                else if (args[i] == "--choptest")
+                {
+                    chopTest = true;
+                    chopInterval = Int32.Parse(args[++i]);
+                    chopStep = Int32.Parse(args[++i]);
                 }
                 else
                 {
@@ -1026,13 +1035,26 @@ namespace driver
             telemetryWorker.Start();
             writeWorker.Start();
             readWorker.Start();
-            worker.Start();
-            
-            config.Show();
-            System.Windows.Forms.Application.Run(stats);
 
-            // TODO: Put this in its own thread
-            
+            if (chopTest)
+            {
+                writeQueue.Add("M BL 9000");
+                writeQueue.Add("M BL 9000");
+                Thread.Sleep(1000);
+
+                for (int pos = 9000; pos > 1000; pos -= chopStep)
+                {
+                    writeQueue.Add(String.Format("M BL {0}", pos));
+                    writeQueue.Add(String.Format("M BR {0}", pos));
+                    Thread.Sleep(chopInterval);
+                }
+            }
+            else {
+                worker.Start();
+                config.Show();
+                System.Windows.Forms.Application.Run(stats);
+            }
+
         }
     }
 }
