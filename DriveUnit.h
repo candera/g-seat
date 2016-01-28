@@ -218,7 +218,7 @@ class DriveUnit {
     long deltaX = pos - _lastPos;
     _v = 0.0;
     if (deltaT != 0) {
-      _v = deltaX / deltaT;
+      _v = deltaX / (double) deltaT;
     }
 
     _targetV = posError * _params[KVTARGET];
@@ -268,8 +268,8 @@ class DriveUnit {
       dtos(tvs, _targetV);
       sprintf(buf, "ch=%s,t=%ld,pos=%ld,target=%ld,drive=%ld,boost=%ld,v=%s,target-v=%s,goal=%ld",
               _channelName,
-              micros(),
-              readPos(),
+              _lastT,
+              _lastPos,
               _target,
               _drive,
               _boost,
