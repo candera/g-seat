@@ -105,17 +105,18 @@ class DriveUnit {
     int minObserved = observed;
     long minObservedAt = millis();
 
-    setDrive(-3750);
-
-    do {
-      now = millis();
-      observed = _encoder->getPos();
-      if (observed < minObserved) {
-        minObserved = observed;
-        minObservedAt = now;
-      }
-      delay(10);
-    } while ((now - minObservedAt) < threshold);
+    for (int d = -2000; d >= -10000; d -= 1500) {
+      setDrive(d);
+      do {
+        now = millis();
+        observed = _encoder->getPos();
+        if (observed < minObserved) {
+          minObserved = observed;
+          minObservedAt = now;
+        }
+        delay(10);
+      } while ((now - minObservedAt) < threshold);
+    }
 
     _posLow = minObserved;
     setDrive(0);
