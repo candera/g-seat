@@ -839,6 +839,7 @@ namespace driver
                     stats.DVAC = aAirframe;
                     stats.DVSeat = aSeat;
                     stats.DVTot = f;
+                    stats.T = ts[now];
                     stats.DeltaT = ts[now] - ts[ago[1]];
 
                     // We skip the first few frames until we have enough
@@ -854,12 +855,14 @@ namespace driver
                             {
                                 _recordFlushOp.Wait();
                             }
-                            recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}",
+                            recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}, {13}, {14}",
                                                    t,
                                                    data.xDot, data.yDot, data.zDot,
                                                    yaw, pitch, roll,
                                                    commandBL, commandBR,
-                                                   commandSL, commandSR);
+                                                   commandSL, commandSR,
+                                                   acc.X, acc.Y, acc.Z,
+                                                   data.alpha);
 
                             _recordFlushOp = recordWriter.FlushAsync();
                         }
@@ -928,7 +931,7 @@ namespace driver
                     ++i;
                     if ((i < args.Length) && !args[i].StartsWith("--"))
                     {
-                        recordWriter = new StreamWriter(args[++i]);
+                        recordWriter = new StreamWriter(args[i]);
                     }
                     else
                     {

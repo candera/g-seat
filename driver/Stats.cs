@@ -13,6 +13,7 @@ namespace driver
         public Parts<double> Forces;
         public Parts<double> G;
         public Parts<long> Commands;
+        public double T;
         public double DeltaT;
         public double Yaw;
         public double Pitch;
