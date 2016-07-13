@@ -857,7 +857,7 @@ namespace driver
                             }
                             recordWriter.WriteLine("{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}, {13}, {14}, {15}, {16}, {17}",
                                                    t,
-                                                   data.x, data.y, data.z
+                                                   data.x, data.y, data.z,
                                                    data.xDot, data.yDot, data.zDot,
                                                    yaw, pitch, roll,
                                                    commandBL, commandBR,
