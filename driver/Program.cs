@@ -975,7 +975,7 @@ namespace driver
             {
                 write = (s) => Console.WriteLine(s);
                 read = () => {
-                    Thread.Sleep(TimeSpan.MaxValue);
+                    Thread.Sleep(Int32.MaxValue);
                     return "";
                 };
             }
